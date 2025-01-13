@@ -1,0 +1,120 @@
+{% load static %}
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Docker Stats</title>
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+
+        .container {
+            display: flex;
+            gap: 20px;
+        }
+
+        .stats-panel {
+            flex: 1;
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        .graph-panel {
+            flex: 2;
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        th, td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid #ddd;
+        }
+
+        th {
+            background-color: #f8f9fa;
+            font-weight: bold;
+        }
+
+        tr:hover {
+            background-color: #f5f5f5;
+        }
+
+        .graph-image {
+            width: 100%;
+            height: auto;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="stats-panel">
+            <h2>Container Stats</h2>
+            <table id="statsTable">
+                <thead>
+                    <tr>
+                        <th>Container Name</th>
+                        <th>CPU Usage</th>
+                        <th>Memory Usage</th>
+                        <th>Network I/O</th>
+                    </tr>
+                </thead>
+                <tbody>
+                </tbody>
+            </table>
+        </div>
+
+        <div class="graph-panel">
+            <h2>Network Visualization</h2>
+            <img id="networkGraph" class="graph-image" src="" alt="Docker Network Graph">
+        </div>
+    </div>
+
+    <script>
+        function updateStats() {
+            $.get('{% url "stats" %}', { type: 'stats' }, function(data) {
+                const tbody = $('#statsTable tbody');
+                tbody.empty();
+
+                data.stats.forEach(function(container) {
+                    tbody.append(`
+                        <tr>
+                            <td>${container.name}</td>
+                            <td>${container.cpu_percent}</td>
+                            <td>${container.memory_usage}</td>
+                            <td>${container.network_io}</td>
+                        </tr>
+                    `);
+                });
+            });
+        }
+
+        function updateGraph() {
+            $.get('{% url "stats" %}', { type: 'graph' }, function(data) {
+                $('#networkGraph').attr('src', 'data:image/png;base64,' + data.graph);
+            });
+        }
+
+        // Update stats and graph every second
+        setInterval(updateStats, 1000);
+        setInterval(updateGraph, 1000);
+
+        // Initial updates
+        updateStats();
+        updateGraph();
+    </script>
+</body>
+</html>

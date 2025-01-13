@@ -1,0 +1,4 @@
+Django==5.1.4
+docker==7.1.0
+graphviz==0.20.3
+
