@@ -80,7 +80,9 @@ DATABASES = {
         "NAME": BASE_DIR / "db.sqlite3",
     }
 }
-
+MIGRATION_MODULES = {
+    'dStats': None,  # Disable migrations for dStats app
+}
 
 # Password validation
 # https://docs.djangoproject.com/en/5.1/ref/settings/#auth-password-validators
