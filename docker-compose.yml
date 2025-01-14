@@ -1,0 +1,12 @@
+services:
+  dstats:
+    container_name: dStats
+    build: .
+    ports:
+      - "2743:2743"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock  # This mounts the Docker socket
+    privileged: true  # Grants additional privileges
+    environment:
+      - DJANGO_SETTINGS_MODULE=dStats.settings
+    command: ["daphne", "-b", "0.0.0.0", "-p", "2743", "dStats.asgi:application"]

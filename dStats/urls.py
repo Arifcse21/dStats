@@ -20,5 +20,5 @@ from django.urls import path
 from .views import DockerStatsView
 
 urlpatterns = [
-    path("dstats/", DockerStatsView.as_view(), name="stats"),
+    path("", DockerStatsView.as_view(), name="stats"),
 ]
