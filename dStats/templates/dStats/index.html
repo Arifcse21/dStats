@@ -1,4 +1,3 @@
-{% load static %}
 <!DOCTYPE html>
 <html>
 <head>
@@ -17,16 +16,8 @@
             gap: 20px;
         }
 
-        .stats-panel {
+        .stats-panel, .graph-panel {
             flex: 1;
-            background: white;
-            padding: 20px;
-            border-radius: 8px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-        }
-
-        .graph-panel {
-            flex: 2;
             background: white;
             padding: 20px;
             border-radius: 8px;
@@ -57,11 +48,35 @@
             width: 100%;
             height: auto;
         }
+
+        .button-group {
+            margin-bottom: 20px;
+        }
+
+        .button-group button {
+            padding: 10px 20px;
+            margin-right: 10px;
+            border: none;
+            border-radius: 5px;
+            background-color: #007bff;
+            color: white;
+            cursor: pointer;
+        }
+
+        .button-group button:hover {
+            background-color: #0056b3;
+        }
     </style>
 </head>
 <body>
+    <div class="button-group">
+        <button id="showStats">Show Stats Only</button>
+        <button id="showGraph">Show Graph Only</button>
+        <button id="showBoth">Show Both</button>
+    </div>
+
     <div class="container">
-        <div class="stats-panel">
+        <div class="stats-panel" id="statsPanel">
             <h2>Container Stats</h2>
             <table id="statsTable">
                 <thead>
@@ -77,44 +92,98 @@
             </table>
         </div>
 
-        <div class="graph-panel">
+        <div class="graph-panel" id="graphPanel">
             <h2>Network Visualization</h2>
             <img id="networkGraph" class="graph-image" src="" alt="Docker Network Graph">
         </div>
     </div>
 
     <script>
-        function updateStats() {
-            $.get('{% url "stats" %}', { type: 'stats' }, function(data) {
-                const tbody = $('#statsTable tbody');
-                tbody.empty();
+        let updateStatsInterval = null;
+        let updateGraphInterval = null;
 
-                data.stats.forEach(function(container) {
-                    tbody.append(`
-                        <tr>
-                            <td>${container.name}</td>
-                            <td>${container.cpu_percent}</td>
-                            <td>${container.memory_usage}</td>
-                            <td>${container.network_io}</td>
-                        </tr>
-                    `);
+        function updateStats() {
+            $.get('{% url "stats" %}', { type: 'stats' })
+                .done(function(data) {
+                    const tbody = $('#statsTable tbody');
+                    tbody.empty();
+
+                    data.stats.forEach(function(container) {
+                        tbody.append(`
+                            <tr>
+                                <td>${container.name}</td>
+                                <td>${container.cpu_percent}</td>
+                                <td>${container.memory_usage}</td>
+                                <td>${container.network_io}</td>
+                            </tr>
+                        `);
+                    });
+                })
+                .fail(function(error) {
+                    console.error('Error fetching stats:', error);
                 });
-            });
         }
 
         function updateGraph() {
-            $.get('{% url "stats" %}', { type: 'graph' }, function(data) {
-                $('#networkGraph').attr('src', 'data:image/png;base64,' + data.graph);
-            });
+            $.get('{% url "stats" %}', { type: 'graph' })
+                .done(function(data) {
+                    $('#networkGraph').attr('src', 'data:image/png;base64,' + data.graph);
+                })
+                .fail(function(error) {
+                    console.error('Error fetching graph:', error);
+                });
         }
 
-        // Update stats and graph every second
-        setInterval(updateStats, 1000);
-        setInterval(updateGraph, 1000);
+        function startStats() {
+            if (!updateStatsInterval) {
+                updateStats();
+                updateStatsInterval = setInterval(updateStats, 1000);
+            }
+        }
 
-        // Initial updates
-        updateStats();
-        updateGraph();
+        function startGraph() {
+            if (!updateGraphInterval) {
+                updateGraph();
+                updateGraphInterval = setInterval(updateGraph, 1000);
+            }
+        }
+
+        function stopStats() {
+            clearInterval(updateStatsInterval);
+            updateStatsInterval = null;
+        }
+
+        function stopGraph() {
+            clearInterval(updateGraphInterval);
+            updateGraphInterval = null;
+        }
+
+        $(document).ready(function() {
+            // Button handlers
+            $('#showStats').on('click', function() {
+                $('#statsPanel').show();
+                $('#graphPanel').hide();
+                stopGraph();
+                startStats();
+            });
+
+            $('#showGraph').on('click', function() {
+                $('#statsPanel').hide();
+                $('#graphPanel').show();
+                stopStats();
+                startGraph();
+            });
+
+            $('#showBoth').on('click', function() {
+                $('#statsPanel').show();
+                $('#graphPanel').show();
+                startStats();
+                startGraph();
+            });
+
+            // Initialize with both panels visible
+            $('#showBoth').click();
+        });
     </script>
 </body>
 </html>
