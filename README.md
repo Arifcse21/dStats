@@ -1,13 +1,24 @@
 # dStats
 
-### Run in docker manually
 
+### Deploy container directly
 ```bash
-docker build -t dstats:0.1.0 .
+docker pull arifcse21/dstats:latest
 ```
 
 ```bash
-docker run -d --name docker-stats-web --privileged -v /var/run/docker.sock:/var/run/docker.sock -p 2743:2743 dstats:0.1.0
+docker run -d --name docker-stats-web --privileged -v /var/run/docker.sock:/var/run/docker.sock -p 2743:2743 arifcse21/dstats:latest
+```
+
+
+### Run in docker manually
+
+```bash
+docker build -t dstats:latest .
+```
+
+```bash
+docker run -d --name docker-stats-web --privileged -v /var/run/docker.sock:/var/run/docker.sock -p 2743:2743 dstats:latest
 ```
 
 ### Run in docker compose

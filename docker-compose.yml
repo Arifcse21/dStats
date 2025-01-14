@@ -2,7 +2,7 @@ services:
   dstats:
     container_name: docker-stats-web
     build: .
-    image: dstats:0.1.0
+    image: dstats:latest
     restart: always
     ports:
       - "2743:2743"
