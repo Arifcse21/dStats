@@ -83,7 +83,7 @@ DATABASES = {
     }
 }
 MIGRATION_MODULES = {
-    'dStats': None,  # Disable migrations for dStats app
+    "dStats": None,  # Disable migrations for dStats app
 }
 
 # Password validation

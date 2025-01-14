@@ -12,6 +12,7 @@ from django.http import JsonResponse
 from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import csrf_exempt
 
+
 # Keep the existing dataclass definitions
 @dataclass
 class Network:
@@ -21,17 +22,20 @@ class Network:
     isolated: bool
     color: str
 
+
 @dataclass
 class Interface:
     endpoint_id: str
     address: str
     aliases: List[str]
 
+
 @dataclass
 class PortMapping:
     internal: int
     external: int
     protocol: str
+
 
 @dataclass
 class Container:
@@ -40,16 +44,30 @@ class Container:
     interfaces: List[Interface]
     ports: List[PortMapping]
 
+
 @dataclass
 class Link:
     container_id: str
     endpoint_id: str
     network_name: str
 
+
 # Keep the existing color definitions
-COLORS = ["#1f78b4", "#33a02c", "#e31a1c", "#ff7f00", "#6a3d9a", "#b15928", "#a6cee3", "#b2df8a", "#fdbf6f",
-          "#cab2d6", "#ffff99"]
+COLORS = [
+    "#1f78b4",
+    "#33a02c",
+    "#e31a1c",
+    "#ff7f00",
+    "#6a3d9a",
+    "#b15928",
+    "#a6cee3",
+    "#b2df8a",
+    "#fdbf6f",
+    "#cab2d6",
+    "#ffff99",
+]
 color_index = 0
+
 
 def get_unique_color() -> str:
     global color_index
@@ -60,8 +78,9 @@ def get_unique_color() -> str:
         c = "#%06x" % random.randint(0, 0xFFFFFF)
     return c
 
+
 class DockerStatsView(TemplateView):
-    template_name = 'dStats/index.html'
+    template_name = "dStats/index.html"
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
@@ -80,8 +99,8 @@ class DockerStatsView(TemplateView):
                 "splines": "true",
                 "overlap": "false",
                 "nodesep": "2.0",
-                "ranksep": "2.0"
-            }
+                "ranksep": "2.0",
+            },
         )
 
         # Draw networks and containers
@@ -97,7 +116,7 @@ class DockerStatsView(TemplateView):
 
         # Convert graph to base64 image
         img_data = g.pipe()
-        encoded_img = base64.b64encode(img_data).decode('utf-8')
+        encoded_img = base64.b64encode(img_data).decode("utf-8")
         return encoded_img
 
     def get_networks(self, client):
@@ -110,8 +129,12 @@ class DockerStatsView(TemplateView):
                 continue
 
             internal = net.attrs.get("Internal", False)
-            isolated = net.attrs.get("Options", {}).get(
-                "com.docker.network.bridge.enable_icc", "true") == "false"
+            isolated = (
+                net.attrs.get("Options", {}).get(
+                    "com.docker.network.bridge.enable_icc", "true"
+                )
+                == "false"
+            )
 
             color = get_unique_color()
             networks[net.name] = Network(net.name, gateway, internal, isolated, color)
@@ -127,10 +150,14 @@ class DockerStatsView(TemplateView):
             interfaces = []
             ports = []
 
-            for net_name, net_info in container.attrs["NetworkSettings"]["Networks"].items():
+            for net_name, net_info in container.attrs["NetworkSettings"][
+                "Networks"
+            ].items():
                 endpoint_id = net_info["EndpointID"]
                 aliases = net_info.get("Aliases", [])
-                interfaces.append(Interface(endpoint_id, net_info['IPAddress'], aliases))
+                interfaces.append(
+                    Interface(endpoint_id, net_info["IPAddress"], aliases)
+                )
                 links.append(Link(container.id, endpoint_id, net_name))
 
             port_mappings = container.attrs["NetworkSettings"]["Ports"]
@@ -138,14 +165,18 @@ class DockerStatsView(TemplateView):
                 for container_port, host_ports in port_mappings.items():
                     if host_ports:
                         for host_port in host_ports:
-                            internal_port, protocol = container_port.split('/')
-                            ports.append(PortMapping(
-                                int(internal_port),
-                                int(host_port['HostPort']),
-                                protocol
-                            ))
+                            internal_port, protocol = container_port.split("/")
+                            ports.append(
+                                PortMapping(
+                                    int(internal_port),
+                                    int(host_port["HostPort"]),
+                                    protocol,
+                                )
+                            )
 
-            containers.append(Container(container.id, container.name, interfaces, ports))
+            containers.append(
+                Container(container.id, container.name, interfaces, ports)
+            )
 
         return containers, links
 
@@ -157,12 +188,13 @@ class DockerStatsView(TemplateView):
             label += " | Containers isolated"
         label += "}"
 
-        g.node(f"network_{net.name}",
-               shape="record",
-               label=label,
-               fillcolor=net.color,
-               style="filled"
-               )
+        g.node(
+            f"network_{net.name}",
+            shape="record",
+            label=label,
+            fillcolor=net.color,
+            style="filled",
+        )
 
     def draw_container(self, g: Graph, c: Container):
         iface_labels = []
@@ -181,18 +213,20 @@ class DockerStatsView(TemplateView):
         if port_labels:
             label += "\\nPorts:\\n" + "\\n".join(port_labels)
 
-        g.node(f"container_{c.container_id}",
-               shape="box",
-               label=label,
-               fillcolor="#ff9999",
-               style="filled"
-               )
+        g.node(
+            f"container_{c.container_id}",
+            shape="box",
+            label=label,
+            fillcolor="#ff9999",
+            style="filled",
+        )
 
     def draw_link(self, g: Graph, networks: Dict[str, Network], link: Link):
-        g.edge(f"container_{link.container_id}",
-               f"network_{link.network_name}",
-               color=networks[link.network_name].color
-               )
+        g.edge(
+            f"container_{link.container_id}",
+            f"network_{link.network_name}",
+            color=networks[link.network_name].color,
+        )
 
     @method_decorator(csrf_exempt)
     def dispatch(self, *args, **kwargs):
@@ -207,11 +241,23 @@ class DockerStatsView(TemplateView):
                 container_stats = container.stats(stream=False)
 
                 # Calculate CPU percentage
-                cpu_total = float(container_stats["cpu_stats"]["cpu_usage"]["total_usage"])
-                cpu_delta = cpu_total - float(container_stats["precpu_stats"]["cpu_usage"]["total_usage"])
-                system_delta = float(container_stats["cpu_stats"]["system_cpu_usage"]) - float(container_stats["precpu_stats"]["system_cpu_usage"])
-                online_cpus = container_stats["cpu_stats"].get("online_cpus",
-                    len(container_stats["cpu_stats"]["cpu_usage"].get("percpu_usage", [1])))
+                cpu_total = float(
+                    container_stats["cpu_stats"]["cpu_usage"]["total_usage"]
+                )
+                cpu_delta = cpu_total - float(
+                    container_stats["precpu_stats"]["cpu_usage"]["total_usage"]
+                )
+                system_delta = float(
+                    container_stats["cpu_stats"]["system_cpu_usage"]
+                ) - float(container_stats["precpu_stats"]["system_cpu_usage"])
+                online_cpus = container_stats["cpu_stats"].get(
+                    "online_cpus",
+                    len(
+                        container_stats["cpu_stats"]["cpu_usage"].get(
+                            "percpu_usage", [1]
+                        )
+                    ),
+                )
 
                 cpu_percent = 0.0
                 if system_delta > 0.0:
@@ -226,35 +272,37 @@ class DockerStatsView(TemplateView):
                 # Network usage
                 net_usage = container_stats.get("networks", {})
                 network_in = sum([net.get("rx_bytes", 0) for net in net_usage.values()])
-                network_out = sum([net.get("tx_bytes", 0) for net in net_usage.values()])
+                network_out = sum(
+                    [net.get("tx_bytes", 0) for net in net_usage.values()]
+                )
 
-                stats.append({
-                    'name': container.name,
-                    'cpu_percent': f"{cpu_percent:.2f}%",
-                    'memory_usage': f"{mem_mb:.2f} MB ({mem_percent:.2f}%)",
-                    'network_io': f"IN: {network_in/1024:.2f} KB / OUT: {network_out/1024:.2f} KB"
-                })
+                stats.append(
+                    {
+                        "name": container.name,
+                        "cpu_percent": f"{cpu_percent:.2f}%",
+                        "memory_usage": f"{mem_mb:.2f} MB ({mem_percent:.2f}%)",
+                        "network_io": f"IN: {network_in/1024:.2f} KB / OUT: {network_out/1024:.2f} KB",
+                    }
+                )
 
             except Exception as e:
-                stats.append({
-                    'name': container.name,
-                    'cpu_percent': 'N/A',
-                    'memory_usage': 'N/A',
-                    'network_io': 'N/A'
-                })
+                stats.append(
+                    {
+                        "name": container.name,
+                        "cpu_percent": "N/A",
+                        "memory_usage": "N/A",
+                        "network_io": "N/A",
+                    }
+                )
 
         return stats
 
     def get(self, request, *args, **kwargs):
-        if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
-            if request.GET.get('type') == 'stats':
-                return JsonResponse({'stats': self.get_container_stats()})
-            elif request.GET.get('type') == 'graph':
-                return JsonResponse({'graph': self.generate_network_graph()})
+        if request.headers.get("X-Requested-With") == "XMLHttpRequest":
+            if request.GET.get("type") == "stats":
+                return JsonResponse({"stats": self.get_container_stats()})
+            elif request.GET.get("type") == "graph":
+                return JsonResponse({"graph": self.generate_network_graph()})
 
         context = self.get_context_data(**kwargs)
         return self.render_to_response(context)
-
-
-
-
