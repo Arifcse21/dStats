@@ -8,9 +8,9 @@ cffi==1.17.1
 charset-normalizer==3.4.1
 click==8.1.8
 constantly==23.10.4
-cryptography==44.0.0
+cryptography>=44.0.1
 daphne==4.1.2
-Django==5.1.4
+Django>=5.1.5
 docker==7.1.0
 graphviz==0.20.3
 h2==4.1.0
