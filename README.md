@@ -12,10 +12,13 @@ Run the server:
 ```bash
 dstats.server
 ```
-Open your browser and go to:  
-  **http://localhost:2743**
----
 
+## **Access the Application(Running on port 2743)**
+- Open your browser and go to:  
+  **http://localhost:2743**
+
+---
+# **Run with Docker**
 ## **Deploy Container Directly**
 Pull and run the container from Docker Hub:
 
