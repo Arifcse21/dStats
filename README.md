@@ -4,6 +4,17 @@
 **dStats** is a real-time web-based monitoring tool that provides performance stats for Docker containers and visualizes their network connectivity graph.
 
 ---
+## Run the Python pip package
+```bash
+pip install dStats
+```
+Run the server:
+```bash
+dstats.server
+```
+Open your browser and go to:  
+  **http://localhost:2743**
+---
 
 ## **Deploy Container Directly**
 Pull and run the container from Docker Hub:
