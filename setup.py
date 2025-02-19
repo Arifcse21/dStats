@@ -16,7 +16,7 @@ setup(
         "graphviz>=0.20.3",
         "daphne>=4.1.2",
         "requests>=2.32.3",
-        "black>=24.10.0"
+        "black>=24.10.0",
     ],
     classifiers=[
         "Programming Language :: Python :: 3",
@@ -25,8 +25,8 @@ setup(
     ],
     python_requires=">=3.12.3",
     entry_points={
-        'console_scripts': [
-            'dStats.server=dStats.server:main',
+        "console_scripts": [
+            "dStats.server=dStats.server:main",
         ],
     },
 )

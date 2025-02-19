@@ -3,16 +3,12 @@ import sys
 import subprocess
 from daphne.cli import CommandLineInterface
 
+
 def main():
-    os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'dStats.settings')
-    
+    os.environ.setdefault("DJANGO_SETTINGS_MODULE", "dStats.settings")
+
     # Construct the command to run Daphne
-    command = [
-        'daphne',
-        '-b', '0.0.0.0',
-        '-p', '2743',
-        'dStats.asgi:application'
-    ]
+    command = ["daphne", "-b", "0.0.0.0", "-p", "2743", "dStats.asgi:application"]
     try:
         # Run the command
         subprocess.run(command)
@@ -23,5 +19,6 @@ def main():
     except Exception as e:
         print(f"Error: {e}")
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     main()
