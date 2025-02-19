@@ -12,7 +12,7 @@ setup(
     author_email="arifcse21@gmail.com",
     url="https://github.com/Arifcse21/dStats",
     install_requires=[
-        "Django>=5.1.4",
+        "Django>=5.1.5",
         "graphviz>=0.20.3",
         "daphne>=4.1.2",
         "requests>=2.32.3",
