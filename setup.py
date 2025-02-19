@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 
 setup(
     name="dStats",
-    version="0.1.0",
+    version="1.0.0",
     packages=find_packages(),
     include_package_data=True,
     description="A real-time web-based monitoring tool that provides performance stats for Docker containers and visualizes their network connectivity graph",
@@ -20,7 +20,7 @@ setup(
     ],
     classifiers=[
         "Programming Language :: Python :: 3",
-        "License :: MIT License",
+        "License :: OSI Approved :: MIT License",
         "Operating System :: OS Independent",
     ],
     python_requires=">=3.12.3",

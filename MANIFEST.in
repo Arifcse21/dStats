@@ -1,0 +1,4 @@
+# MANIFEST.in
+
+include dStats/templates/*
+recursive-include dStats/templates *
