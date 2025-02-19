@@ -113,7 +113,7 @@ We believe collaboration is key to building great software. Here’s how you can
    - Fork this repository.
    - Clone your fork:  
      ```bash
-     git clone https://github.com/your-username/dStats.git
+     git clone https://github.com/Arifcse21/dStats.git
      cd dStats
      ```
    - Create a branch:  
