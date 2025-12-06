@@ -4,11 +4,16 @@ from pathlib import Path
 
 
 def is_auth_enabled():
-    return (
-        config("USE_AUTH", "false").lower() in ("true", "1", "yes")
-        and config("AUTH_USERNAME")
-        and config("AUTH_PASSWORD")
-    )
+    HAS_USE_AUTH = config("USE_AUTH", "false").lower() in ("true", "1", "yes")
+    HAS_AUTH_USERNAME = config("AUTH_USERNAME")
+    HAS_AUTH_PASSWORD = config("AUTH_PASSWORD")
+
+    if HAS_USE_AUTH and HAS_AUTH_USERNAME and HAS_AUTH_PASSWORD:
+        data = True
+    else:
+        data = False
+    print(f"Auth enabled: {data}")
+    return data
 
 
 SECRET_KEY = "z)f1y6v3$3fa1=pbz2_mv&uhx=#cne(@=vy*)$1j-h(fyit+ri"
