@@ -9,12 +9,12 @@
 pip install dStats
 ```
 
-# Run the server:
+## Run the server:
 ```bash
 dStats.server
 ```
 
-# With Basic Authentication(Good for security)
+## With Basic Authentication(Good for security)
 ```bash
 USE_AUTH=true AUTH_USERNAME=<your_username> AUTH_PASSWORD=<your_password> dStats.server
 ```
