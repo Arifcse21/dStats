@@ -8,7 +8,38 @@
             font-family: Arial, sans-serif;
             margin: 0;
             padding: 20px;
-            background-color: #f5f5f5;
+            background-color: #8ff399;
+        }
+
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+
+        .coffee-button {
+            display: inline-flex;
+            align-items: center;
+            padding: 10px 20px;
+            background-color: #FFDD00;
+            color: #000000;
+            text-decoration: none;
+            border-radius: 8px;
+            font-weight: bold;
+            transition: transform 0.2s, box-shadow 0.2s;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+        }
+
+        .coffee-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+        }
+
+        .coffee-icon {
+            width: 24px;
+            height: 24px;
+            margin-right: 8px;
         }
 
         .container {
@@ -66,12 +97,179 @@
         .button-group button:hover {
             background-color: #0056b3;
         }
+
+        footer {
+            margin-top: 40px;
+            text-align: center;
+            padding: 20px;
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        footer .coffee-button {
+            margin-top: 10px;
+        }
+
+        /* Login Modal Styles */
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0,0,0,0.5);
+            backdrop-filter: blur(5px);
+        }
+
+        .modal-content {
+            background-color: #fefefe;
+            margin: 15% auto;
+            padding: 30px;
+            border-radius: 10px;
+            width: 90%;
+            max-width: 400px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+            animation: slideDown 0.3s ease-out;
+        }
+
+        @keyframes slideDown {
+            from {
+                transform: translateY(-50px);
+                opacity: 0;
+            }
+            to {
+                transform: translateY(0);
+                opacity: 1;
+            }
+        }
+
+        .modal-header {
+            text-align: center;
+            margin-bottom: 25px;
+        }
+
+        .modal-header h2 {
+            margin: 0;
+            color: #333;
+            font-size: 24px;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            color: #555;
+            font-weight: 500;
+        }
+
+        .form-group input {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #ddd;
+            border-radius: 5px;
+            font-size: 14px;
+            box-sizing: border-box;
+            transition: border-color 0.3s;
+        }
+
+        .form-group input:focus {
+            outline: none;
+            border-color: #007bff;
+        }
+
+        .login-button {
+            width: 100%;
+            padding: 12px;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+
+        .login-button:hover {
+            background-color: #0056b3;
+        }
+
+        .login-button:disabled {
+            background-color: #ccc;
+            cursor: not-allowed;
+        }
+
+        .error-message {
+            color: #dc3545;
+            background-color: #f8d7da;
+            border: 1px solid #f5c6cb;
+            padding: 10px;
+            border-radius: 5px;
+            margin-bottom: 15px;
+            display: none;
+        }
+
+        .logout-button {
+            padding: 8px 16px;
+            background-color: #dc3545;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            margin-left: 10px;
+        }
+
+        .logout-button:hover {
+            background-color: #c82333;
+        }
     </style>
 </head>
 <body>
+    <!-- Login Modal -->
+    <div id="loginModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>** Authentication Enabled **</h2>
+                <h3>Login Required</h3>
+                <p style="color: #666; margin-top: 10px;">Please enter your credentials</p>
+            </div>
+            <div id="errorMessage" class="error-message"></div>
+            <form id="loginForm">
+                <div class="form-group">
+                    <label for="username">Username</label>
+                    <input type="text" id="username" name="username" required autocomplete="username">
+                </div>
+                <div class="form-group">
+                    <label for="password">Password</label>
+                    <input type="password" id="password" name="password" required autocomplete="current-password">
+                </div>
+                <button type="submit" class="login-button">Login</button>
+            </form>
+        </div>
+    </div>
+
+    <div class="header">
+        <h1 style="margin: 0;">Docker Stats and Network Visualizer</h1>
+        <div>
+            {% if auth_enabled and user.is_authenticated %}
+                <span style="margin-right: 15px; color: #333;">Welcome, {{ user.username }}</span>
+                <form method="post" action="{% url 'logout' %}" style="display: inline;">
+                    {% csrf_token %}
+                    <button type="submit" class="logout-button">Logout</button>
+                </form>
+            {% endif %}
+        </div>
+    </div>
+
     <div class="button-group">
         <button id="showStats">Show Stats Only</button>
-        <button id="showGraph">Show Graph Only</button>
+        <button id="showGraph">Show Network Graph Only</button>
         <button id="showBoth">Show Both</button>
     </div>
 
@@ -98,9 +296,63 @@
         </div>
     </div>
 
+    <footer>
+        <p>Enjoying this Docker Stats and Network Visualizer? Support the project!</p>
+        <a href="https://ko-fi.com/arifcse21" target="_blank" class="coffee-button">
+            Buy me a coffee
+        </a>
+    </footer>
+
     <script>
         let updateStatsInterval = null;
         let updateGraphInterval = null;
+        let isAuthenticated = {{ user.is_authenticated|lower }};
+        let authEnabled = {{ auth_enabled|lower }};
+
+        // Check authentication and show modal if needed
+        $(document).ready(function() {
+            if (authEnabled && !isAuthenticated) {
+                $('#loginModal').show();
+            } else {
+                $('#showBoth').click();
+            }
+        });
+
+        // Handle login form submission
+        $('#loginForm').on('submit', function(e) {
+            e.preventDefault();
+            
+            const username = $('#username').val();
+            const password = $('#password').val();
+            const submitButton = $('.login-button');
+            
+            submitButton.prop('disabled', true).text('Logging in...');
+            $('#errorMessage').hide();
+
+            $.ajax({
+                url: '{% url "stats" %}',
+                method: 'POST',
+                data: {
+                    username: username,
+                    password: password,
+                    csrfmiddlewaretoken: '{{ csrf_token }}'
+                },
+                success: function(response) {
+                    if (response.success) {
+                        $('#loginModal').hide();
+                        isAuthenticated = true;
+                        location.reload(); // Reload to update UI with user info
+                    } else {
+                        $('#errorMessage').text(response.error || 'Invalid credentials').show();
+                        submitButton.prop('disabled', false).text('Login');
+                    }
+                },
+                error: function() {
+                    $('#errorMessage').text('An error occurred. Please try again.').show();
+                    submitButton.prop('disabled', false).text('Login');
+                }
+            });
+        });
 
         function updateStats() {
             $.get('{% url "stats" %}', { type: 'stats' })
@@ -119,8 +371,13 @@
                         `);
                     });
                 })
-                .fail(function(error) {
-                    console.error('Error fetching stats:', error);
+                .fail(function(xhr) {
+                    if (xhr.status === 401) {
+                        $('#loginModal').show();
+                        stopStats();
+                        stopGraph();
+                    }
+                    console.error('Error fetching stats:', xhr);
                 });
         }
 
@@ -129,20 +386,25 @@
                 .done(function(data) {
                     $('#networkGraph').attr('src', 'data:image/png;base64,' + data.graph);
                 })
-                .fail(function(error) {
-                    console.error('Error fetching graph:', error);
+                .fail(function(xhr) {
+                    if (xhr.status === 401) {
+                        $('#loginModal').show();
+                        stopStats();
+                        stopGraph();
+                    }
+                    console.error('Error fetching graph:', xhr);
                 });
         }
 
         function startStats() {
-            if (!updateStatsInterval) {
+            if (!updateStatsInterval && (!authEnabled || isAuthenticated)) {
                 updateStats();
                 updateStatsInterval = setInterval(updateStats, 1000);
             }
         }
 
         function startGraph() {
-            if (!updateGraphInterval) {
+            if (!updateGraphInterval && (!authEnabled || isAuthenticated)) {
                 updateGraph();
                 updateGraphInterval = setInterval(updateGraph, 1000);
             }
@@ -158,31 +420,38 @@
             updateGraphInterval = null;
         }
 
-        $(document).ready(function() {
-            // Button handlers
-            $('#showStats').on('click', function() {
-                $('#statsPanel').show();
-                $('#graphPanel').hide();
-                stopGraph();
-                startStats();
-            });
+        // Button handlers
+        $('#showStats').on('click', function() {
+            if (authEnabled && !isAuthenticated) {
+                $('#loginModal').show();
+                return;
+            }
+            $('#statsPanel').show();
+            $('#graphPanel').hide();
+            stopGraph();
+            startStats();
+        });
 
-            $('#showGraph').on('click', function() {
-                $('#statsPanel').hide();
-                $('#graphPanel').show();
-                stopStats();
-                startGraph();
-            });
+        $('#showGraph').on('click', function() {
+            if (authEnabled && !isAuthenticated) {
+                $('#loginModal').show();
+                return;
+            }
+            $('#statsPanel').hide();
+            $('#graphPanel').show();
+            stopStats();
+            startGraph();
+        });
 
-            $('#showBoth').on('click', function() {
-                $('#statsPanel').show();
-                $('#graphPanel').show();
-                startStats();
-                startGraph();
-            });
-
-            // Initialize with both panels visible
-            $('#showBoth').click();
+        $('#showBoth').on('click', function() {
+            if (authEnabled && !isAuthenticated) {
+                $('#loginModal').show();
+                return;
+            }
+            $('#statsPanel').show();
+            $('#graphPanel').show();
+            startStats();
+            startGraph();
         });
     </script>
 </body>

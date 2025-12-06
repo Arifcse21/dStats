@@ -11,4 +11,7 @@ services:
     privileged: true
     environment:
       - DJANGO_SETTINGS_MODULE=dStats.settings
+      - USE_AUTH=true
+      - AUTH_USERNAME=<your_username>
+      - AUTH_PASSWORD=<your_password>
     command: ["daphne", "-b", "0.0.0.0", "-p", "2743", "dStats.asgi:application"]

@@ -8,9 +8,15 @@
 ```bash
 pip install dStats
 ```
-Run the server:
+
+# Run the server:
 ```bash
-dstats.server
+dStats.server
+```
+
+# With Basic Authentication(Good for security)
+```bash
+USE_AUTH=true AUTH_USERNAME=<your_username> AUTH_PASSWORD=<your_password> dStats.server
 ```
 
 ## **Access the Application(Running on port 2743)**
@@ -18,6 +24,7 @@ dstats.server
   **http://localhost:2743**
 
 ---
+
 # **Run with Docker**
 ## **Deploy Container Directly**
 Pull and run the container from Docker Hub:

@@ -17,8 +17,10 @@ Including another URLconf
 
 from django.contrib import admin
 from django.urls import path
-from .views import DockerStatsView
+from django.contrib.auth.views import LogoutView
+from dStats.views import DockerStatsView
 
 urlpatterns = [
     path("", DockerStatsView.as_view(), name="stats"),
+    path("logout/", LogoutView.as_view(next_page="stats"), name="logout"),
 ]

@@ -1,6 +1,6 @@
-# views.py
 import docker
 import json
+from decouple import config
 from dataclasses import asdict, dataclass
 from typing import List, Dict
 import random
@@ -11,9 +11,11 @@ from django.views.generic import TemplateView
 from django.http import JsonResponse
 from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import csrf_exempt
+from django.contrib.auth import authenticate, login
+from dStats.settings import is_auth_enabled
+from django.contrib.auth.models import User
 
 
-# Keep the existing dataclass definitions
 @dataclass
 class Network:
     name: str
@@ -52,7 +54,6 @@ class Link:
     network_name: str
 
 
-# Keep the existing color definitions
 COLORS = [
     "#1f78b4",
     "#33a02c",
@@ -84,6 +85,7 @@ class DockerStatsView(TemplateView):
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
+        context["auth_enabled"] = is_auth_enabled()
         return context
 
     def generate_network_graph(self):
@@ -297,12 +299,41 @@ class DockerStatsView(TemplateView):
 
         return stats
 
+    def check_auth(self, request):
+        """Check if user is authenticated (only if auth is enabled)"""
+        if not is_auth_enabled():
+            return True
+        return request.user.is_authenticated
+
+    def post(self, request, *args, **kwargs):
+        """Handle login via AJAX"""
+        if not is_auth_enabled():
+            return JsonResponse(
+                {"success": False, "error": "Authentication is disabled"}
+            )
+
+        username = request.POST.get("username")
+        password = request.POST.get("password")
+
+        user = authenticate(request, username=username, password=password)
+        if user is not None:
+            login(request, user)
+            return JsonResponse({"success": True})
+        else:
+            return JsonResponse({"success": False, "error": "Invalid credentials"})
+
     def get(self, request, *args, **kwargs):
+        # Handle AJAX requests for stats and graph
         if request.headers.get("X-Requested-With") == "XMLHttpRequest":
+            # Check authentication only if enabled
+            if not self.check_auth(request):
+                return JsonResponse({"error": "Not authenticated"}, status=401)
+
             if request.GET.get("type") == "stats":
                 return JsonResponse({"stats": self.get_container_stats()})
             elif request.GET.get("type") == "graph":
                 return JsonResponse({"graph": self.generate_network_graph()})
 
+        # For normal page loads, render the template
         context = self.get_context_data(**kwargs)
         return self.render_to_response(context)
