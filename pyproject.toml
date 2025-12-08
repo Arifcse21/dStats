@@ -6,7 +6,7 @@ build-backend = "setuptools.build_meta"
 name = "dStats"
 version = "1.0.3"
 description = "A real-time web-based monitoring tool that provides performance stats for Docker containers and visualizes their network connectivity graph"
-readme = "README.md"
+readme = "README_pypi.md"
 license = {text = "MIT License"}
 authors = [
     {name = "Abdullah Al Arif", email = "arifcse21@gmail.com"}

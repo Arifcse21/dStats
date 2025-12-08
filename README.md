@@ -4,17 +4,46 @@
 **dStats** is a real-time web-based monitoring tool that provides performance stats for Docker containers and visualizes their network connectivity graph.
 
 ---
-## Run the Python pip package
+## **Run with Docker**
+Pull and run the container from Docker Hub:
+
+```bash
+docker pull arifcse21/dstats:latest
+```
+
+Run the container with **NO** authentication:
+
+```bash
+docker run -d --name docker-stats-web --privileged \
+-v /var/run/docker.sock:/var/run/docker.sock \
+-p 2743:2743 arifcse21/dstats:latest
+```
+
+Run the container with authentication:
+
+```bash
+docker run -d --name docker-stats-web --privileged \
+-v /var/run/docker.sock:/var/run/docker.sock \
+-p 2743:2743 \
+-e USE_AUTH=true \
+-e AUTH_USERNAME=<your_username> \
+-e AUTH_PASSWORD=<your_password> \
+arifcse21/dstats:latest
+```
+
+---
+
+## Or You can run the Python pip package(requires Python 3.12+):
 ```bash
 pip install dStats
 ```
 
-## Run the server:
+### Run the server:
 ```bash
 dStats.server
 ```
 
-## With Basic Authentication(Good for security)
+### With Basic Authentication(Good for security)
 ```bash
 USE_AUTH=true AUTH_USERNAME=<your_username> AUTH_PASSWORD=<your_password> dStats.server
 ```
@@ -25,75 +54,10 @@ USE_AUTH=true AUTH_USERNAME=<your_username> AUTH_PASSWORD=<your_password> dStats
 
 ---
 
-# **Run with Docker**
-## **Deploy Container Directly**
-Pull and run the container from Docker Hub:
-
-```bash
-docker pull arifcse21/dstats:latest
-```
-
-Run the container:
-
-```bash
-docker run -d --name docker-stats-web --privileged \
--v /var/run/docker.sock:/var/run/docker.sock \
--p 2743:2743 arifcse21/dstats:latest
-```
-
----
-
-## **Clone the Repository**
-
-If you’d like to explore or modify the project, start by cloning the repository:
-
-```bash
-git clone https://github.com/Arifcse21/dStats.git
-cd dStats
-```
-
----
-
-## **Run with Docker Manually**
-
-Build the Docker image locally:
-
-```bash
-docker build -t dstats:latest .
-```
-
-Run the container:
-
-```bash
-docker run -d --name docker-stats-web --privileged \
--v /var/run/docker.sock:/var/run/docker.sock \
--p 2743:2743 dstats:latest
-```
-
----
-
-## **Run with Docker Compose**
-
-Use Docker Compose for easier setup and teardown:
-
-1. Build and start the services:
-
-   ```bash
-   docker compose up -d
-   ```
-
-2. Stop and clean up the services:
-
-   ```bash
-   docker compose down --remove-orphans --rmi all
-   ```
-
----
-
-## **Access the Application**
-
-- Open your browser and go to:  
-  **http://localhost:2743**
+## Example UI
+![Alt docker stats and network graph](examples/stats-and-network-graph.png)
+![Alt docker network graph](examples/network-visualizer-graph.png)
+![Alt docker network graph](examples/stats-chart.png)
 
 Here, you’ll find:
 1. **Container Stats:** Real-time CPU, memory, and network I/O usage.

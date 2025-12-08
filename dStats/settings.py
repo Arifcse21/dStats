@@ -12,7 +12,7 @@ def is_auth_enabled():
         data = True
     else:
         data = False
-    print(f"Auth enabled: {data}")
+    # print(f"Auth enabled: {data}")
     return data
 
 

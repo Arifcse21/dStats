@@ -1,4 +1,4 @@
-FROM python:3.13-slim-bookworm
+FROM python:3.13
 
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
@@ -6,12 +6,12 @@ ENV DJANGO_SETTINGS_MODULE=dStats.settings
 
 WORKDIR /app
 
-RUN apt-get update && apt-get install -y \
-    graphviz \
-    && rm -rf /var/lib/apt/lists/*
+# RUN apt-get update && apt-get install -y \
+#     graphviz \
+#     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install -r requirements.txt
 
 COPY . .
 
