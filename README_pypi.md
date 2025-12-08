@@ -24,9 +24,9 @@ USE_AUTH=true AUTH_USERNAME=<your_username> AUTH_PASSWORD=<your_password> dStats
 
 ---
 ## Example UI
-![Alt docker stats and network graph](examples/stats-and-network-graph.png)
-![Alt docker network graph](examples/network-visualizer-graph.png)
-![Alt docker network graph](examples/stats-chart.png)
+![Alt docker stats and network graph](https://github.com/Arifcse21/dStats/blob/main/examples/stats-and-network-graph.png)
+![Alt docker network graph](https://github.com/Arifcse21/dStats/blob/main/examples/network-visualizer-graph.png)
+![Alt docker network graph](https://github.com/Arifcse21/dStats/blob/main/examples/stats-chart.png)
 
 Here, you’ll find:
 1. **Container Stats:** Real-time CPU, memory, and network I/O usage.
