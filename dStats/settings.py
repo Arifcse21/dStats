@@ -5,8 +5,8 @@ from pathlib import Path
 
 def is_auth_enabled():
     HAS_USE_AUTH = config("USE_AUTH", "false").lower() in ("true", "1", "yes")
-    HAS_AUTH_USERNAME = config("AUTH_USERNAME")
-    HAS_AUTH_PASSWORD = config("AUTH_PASSWORD")
+    HAS_AUTH_USERNAME = config("AUTH_USERNAME", None)
+    HAS_AUTH_PASSWORD = config("AUTH_PASSWORD", None)
 
     if HAS_USE_AUTH and HAS_AUTH_USERNAME and HAS_AUTH_PASSWORD:
         data = True
@@ -66,14 +66,13 @@ ASGI_APPLICATION = "dStats.asgi.application"
 if is_auth_enabled():
     INSTALLED_APPS.append("authboot")
 
-    DATABASES = {
-        "default": {
-            "ENGINE": "django.db.backends.sqlite3",
-            "NAME": "dStats.sqlite3",
-        }
+DATABASES = {
+    "default": {
+        "ENGINE": "django.db.backends.sqlite3",
+        "NAME": "dStats.sqlite3",
     }
+}
 
-    MIGRATION_MODULES = {"dStats": None, "authboot": None}
 
 AUTH_PASSWORD_VALIDATORS = [
     {
