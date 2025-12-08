@@ -1,5 +1,11 @@
-include dStats/templates/*
-recursive-include dStats/templates *
+# MANIFEST.in
 
-include authboot/*
+include README.md
+include LICENSE
+include pyproject.toml
+
+recursive-include dStats *
+
 recursive-include authboot *
+
+recursive-include dStats/examples *.png
