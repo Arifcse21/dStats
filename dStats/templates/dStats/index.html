@@ -304,12 +304,17 @@
     </footer>
 
     <script>
-        let updateStatsInterval = null;
-        let updateGraphInterval = null;
-        let isAuthenticated = {{ user.is_authenticated|lower }};
         let authEnabled = {{ auth_enabled|lower }};
 
-        // Check authentication and show modal if needed
+        {% if auth_enabled %}
+            let isAuthenticated = {{ user.is_authenticated|lower }};
+        {% else %}
+            let isAuthenticated = true;
+        {% endif %}
+
+        let updateStatsInterval = null;
+        let updateGraphInterval = null;
+
         $(document).ready(function() {
             if (authEnabled && !isAuthenticated) {
                 $('#loginModal').show();
@@ -318,7 +323,6 @@
             }
         });
 
-        // Handle login form submission
         $('#loginForm').on('submit', function(e) {
             e.preventDefault();
             
@@ -341,7 +345,7 @@
                     if (response.success) {
                         $('#loginModal').hide();
                         isAuthenticated = true;
-                        location.reload(); // Reload to update UI with user info
+                        location.reload();
                     } else {
                         $('#errorMessage').text(response.error || 'Invalid credentials').show();
                         submitButton.prop('disabled', false).text('Login');
@@ -357,25 +361,29 @@
         function updateStats() {
             $.get('{% url "stats" %}', { type: 'stats' })
                 .done(function(data) {
-                    const tbody = $('#statsTable tbody');
-                    tbody.empty();
+                    if (!authEnabled || isAuthenticated) {
+                        const tbody = $('#statsTable tbody');
+                        tbody.empty();
 
-                    data.stats.forEach(function(container) {
-                        tbody.append(`
-                            <tr>
-                                <td>${container.name}</td>
-                                <td>${container.cpu_percent}</td>
-                                <td>${container.memory_usage}</td>
-                                <td>${container.network_io}</td>
-                            </tr>
-                        `);
-                    });
+                        data.stats.forEach(function(container) {
+                            tbody.append(`
+                                <tr>
+                                    <td>${container.name}</td>
+                                    <td>${container.cpu_percent}</td>
+                                    <td>${container.memory_usage}</td>
+                                    <td>${container.network_io}</td>
+                                </tr>
+                            `);
+                        });
+                    }
                 })
                 .fail(function(xhr) {
-                    if (xhr.status === 401) {
+                    // Only handle auth errors if auth is enabled
+                    if (authEnabled && xhr.status === 401) {
                         $('#loginModal').show();
                         stopStats();
                         stopGraph();
+                        isAuthenticated = false; // Update the JS variable
                     }
                     console.error('Error fetching stats:', xhr);
                 });
@@ -384,13 +392,17 @@
         function updateGraph() {
             $.get('{% url "stats" %}', { type: 'graph' })
                 .done(function(data) {
-                    $('#networkGraph').attr('src', 'data:image/png;base64,' + data.graph);
+                    if (!authEnabled || isAuthenticated) {
+                        $('#networkGraph').attr('src', 'data:image/png;base64,' + data.graph);
+                    }
                 })
                 .fail(function(xhr) {
-                    if (xhr.status === 401) {
+                    // Only handle auth errors if auth is enabled
+                    if (authEnabled && xhr.status === 401) {
                         $('#loginModal').show();
                         stopStats();
                         stopGraph();
+                        isAuthenticated = false;
                     }
                     console.error('Error fetching graph:', xhr);
                 });
