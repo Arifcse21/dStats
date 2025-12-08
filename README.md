@@ -16,6 +16,7 @@ Run the container with **NO** authentication:
 ```bash
 docker run -d --name docker-stats-web --privileged \
 -v /var/run/docker.sock:/var/run/docker.sock \
+--restart always \
 -p 2743:2743 arifcse21/dstats:latest
 ```
 
@@ -24,6 +25,7 @@ Run the container with authentication:
 ```bash
 docker run -d --name docker-stats-web --privileged \
 -v /var/run/docker.sock:/var/run/docker.sock \
+--restart always \
 -p 2743:2743 \
 -e USE_AUTH=true \
 -e AUTH_USERNAME=<your_username> \
