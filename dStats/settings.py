@@ -1,6 +1,7 @@
 import os
 from decouple import config
 from pathlib import Path
+from django.core.management.utils import get_random_secret_key
 
 
 def is_auth_enabled():
@@ -16,7 +17,7 @@ def is_auth_enabled():
     return data
 
 
-SECRET_KEY = "z)f1y6v3$3fa1=pbz2_mv&uhx=#cne(@=vy*)$1j-h(fyit+ri"
+SECRET_KEY = get_random_secret_key()
 
 DEBUG = True
 

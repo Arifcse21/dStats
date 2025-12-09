@@ -57,6 +57,7 @@ USE_AUTH=true AUTH_USERNAME=<your_username> AUTH_PASSWORD=<your_password> dStats
 ---
 
 ## Example UI
+![Alt login screen auth enabled](https://raw.githubusercontent.com/Arifcse21/dStats/main/examples/auth-enabled.png)
 ![Alt docker stats and network graph](https://github.com/Arifcse21/dStats/blob/main/examples/stats-and-network-graph.png)
 ![Alt docker network graph](https://github.com/Arifcse21/dStats/blob/main/examples/network-visualizer-graph.png)
 ![Alt docker network graph](https://github.com/Arifcse21/dStats/blob/main/examples/stats-chart.png)

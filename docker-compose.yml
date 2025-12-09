@@ -1,11 +1,11 @@
 services:
   dstats:
-    container_name: docker-stats-web
+    container_name: docker-stats-web-test
     build: .
     image: dstats:latest
     restart: always
     ports:
-      - "2743:2743"
+      - "6743:2743"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
     privileged: true
