@@ -1,0 +1,24 @@
+[package]
+name = "dstats-rust"
+version = "0.1.0"
+edition = "2024"
+description = "Native accelerator built into dStats as dStats._rust"
+license = "MIT"
+repository = "https://github.com/Arifcse21/dStats"
+publish = false
+
+[lib]
+name = "dstats_rust"
+crate-type = ["cdylib"]
+
+[dependencies]
+bollard = "0.21.1"
+futures = "0.3.31"
+# abi3-py312: one wheel per platform works on every CPython >= 3.12 (matches dStats' requires-python)
+pyo3 = { version = "0.30.1", features = ["extension-module", "abi3-py312"] }
+tokio = { version = "1.54.1", features = ["rt-multi-thread", "time"] }
+
+[profile.release]
+lto = true
+codegen-units = 1
+strip = true

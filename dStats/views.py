@@ -1,5 +1,10 @@
+import asyncio
 import docker
 import json
+import logging
+import threading
+import time
+from concurrent.futures import ThreadPoolExecutor
 from decouple import config
 from dataclasses import asdict, dataclass
 from typing import List, Dict
@@ -8,12 +13,102 @@ from graphviz import Graph
 import base64
 from io import BytesIO
 from django.views.generic import TemplateView
-from django.http import JsonResponse
-from django.utils.decorators import method_decorator
-from django.views.decorators.csrf import csrf_exempt
+from asgiref.sync import sync_to_async
+from django.http import JsonResponse, StreamingHttpResponse
+from django.core.cache import cache
 from django.contrib.auth import authenticate, login
 from dStats.settings import is_auth_enabled
 from django.contrib.auth.models import User
+
+# Native accelerator, present in the platform wheels; pure-Python installs use the fallback below
+try:
+    from dStats import _rust
+except ImportError:
+    _rust = None
+
+# Seconds before a Docker API call is abandoned, so a hung daemon can't hang requests forever
+DOCKER_TIMEOUT = 10
+
+LOGIN_MAX_FAILURES = 5
+LOGIN_LOCKOUT_SECONDS = 300
+
+
+class SharedResult:
+    """Share one computed result between all requests for `ttl` seconds.
+
+    Every open browser tab polls once a second; without this each tab would trigger
+    its own round of Docker API calls. Concurrent callers wait for the computation
+    already in flight instead of starting another one.
+    """
+
+    def __init__(self, ttl):
+        self.ttl = ttl
+        self._lock = threading.Lock()
+        self._value = None
+        self._computed_at = 0.0
+
+    def get(self, compute):
+        with self._lock:
+            if self._value is None or time.monotonic() - self._computed_at >= self.ttl:
+                self._value = compute()
+                self._computed_at = time.monotonic()
+            return self._value
+
+
+STATS_RESULT = SharedResult(ttl=1.0)
+GRAPH_RESULT = SharedResult(ttl=1.0)
+
+logger = logging.getLogger(__name__)
+
+
+class Broadcaster:
+    """Run `compute` once per `interval` while anyone is listening and push each
+    result to every listener.
+
+    Docker is queried at the same rate whether one browser or a hundred are
+    connected, and not at all when nobody is.
+    """
+
+    def __init__(self, compute, interval=1.0):
+        self.compute = compute
+        self.interval = interval
+        self._listeners = set()
+        self._latest = None
+        self._task = None
+
+    async def listen(self):
+        # maxsize=1: a slow client only ever gets the newest result, never a backlog
+        queue = asyncio.Queue(maxsize=1)
+        if self._latest is not None:
+            queue.put_nowait(self._latest)
+        self._listeners.add(queue)
+        if self._task is None or self._task.done():
+            self._task = asyncio.create_task(self._run())
+        try:
+            while True:
+                yield await queue.get()
+        finally:
+            self._listeners.discard(queue)
+
+    async def _run(self):
+        loop = asyncio.get_running_loop()
+        while self._listeners:
+            started = loop.time()
+            try:
+                # Off the event loop: the Docker calls and graphviz are blocking
+                self._latest = await sync_to_async(
+                    self.compute, thread_sensitive=False
+                )()
+            except Exception:
+                logger.exception("Collecting dashboard data failed")
+            else:
+                for queue in self._listeners:
+                    if queue.full():
+                        queue.get_nowait()
+                    queue.put_nowait(self._latest)
+            await asyncio.sleep(max(0.0, self.interval - (loop.time() - started)))
+        # Don't serve stale data to whoever connects next
+        self._latest = None
 
 
 @dataclass
@@ -89,7 +184,7 @@ class DockerStatsView(TemplateView):
         return context
 
     def generate_network_graph(self):
-        client = docker.from_env()
+        client = docker.from_env(timeout=DOCKER_TIMEOUT)
         networks = self.get_networks(client)
         containers, links = self.get_containers(client)
 
@@ -230,74 +325,70 @@ class DockerStatsView(TemplateView):
             color=networks[link.network_name].color,
         )
 
-    @method_decorator(csrf_exempt)
-    def dispatch(self, *args, **kwargs):
-        return super().dispatch(*args, **kwargs)
-
     def get_container_stats(self):
-        client = docker.from_env()
-        stats = []
-
-        for container in client.containers.list():
+        if _rust is not None:
             try:
-                container_stats = container.stats(stream=False)
-
-                # Calculate CPU percentage
-                cpu_total = float(
-                    container_stats["cpu_stats"]["cpu_usage"]["total_usage"]
-                )
-                cpu_delta = cpu_total - float(
-                    container_stats["precpu_stats"]["cpu_usage"]["total_usage"]
-                )
-                system_delta = float(
-                    container_stats["cpu_stats"]["system_cpu_usage"]
-                ) - float(container_stats["precpu_stats"]["system_cpu_usage"])
-                online_cpus = container_stats["cpu_stats"].get(
-                    "online_cpus",
-                    len(
-                        container_stats["cpu_stats"]["cpu_usage"].get(
-                            "percpu_usage", [1]
-                        )
-                    ),
-                )
-
-                cpu_percent = 0.0
-                if system_delta > 0.0:
-                    cpu_percent = (cpu_delta / system_delta) * 100.0 * online_cpus
-
-                # Memory usage
-                mem_usage = container_stats["memory_stats"].get("usage", 0)
-                mem_limit = container_stats["memory_stats"].get("limit", 1)
-                mem_percent = (mem_usage / mem_limit) * 100.0
-                mem_mb = mem_usage / (1024 * 1024)
-
-                # Network usage
-                net_usage = container_stats.get("networks", {})
-                network_in = sum([net.get("rx_bytes", 0) for net in net_usage.values()])
-                network_out = sum(
-                    [net.get("tx_bytes", 0) for net in net_usage.values()]
-                )
-
-                stats.append(
-                    {
-                        "name": container.name,
-                        "cpu_percent": f"{cpu_percent:.2f}%",
-                        "memory_usage": f"{mem_mb:.2f} MB ({mem_percent:.2f}%)",
-                        "network_io": f"IN: {network_in/1024:.2f} KB / OUT: {network_out/1024:.2f} KB",
-                    }
-                )
-
+                return _rust.get_container_stats_parallel()
             except Exception as e:
-                stats.append(
-                    {
-                        "name": container.name,
-                        "cpu_percent": "N/A",
-                        "memory_usage": "N/A",
-                        "network_io": "N/A",
-                    }
-                )
+                print(f"Rust stats failed: {e}, falling back to Python")
 
-        return stats
+        # stats(stream=False) blocks ~1-2s per container while the daemon samples
+        # twice, so fetch them concurrently instead of one after another
+        max_workers = 32
+        client = docker.from_env(timeout=DOCKER_TIMEOUT, max_pool_size=max_workers)
+        containers = client.containers.list()
+        if not containers:
+            return []
+
+        with ThreadPoolExecutor(max_workers=min(max_workers, len(containers))) as pool:
+            return list(pool.map(self.get_single_container_stats, containers))
+
+    def get_single_container_stats(self, container):
+        try:
+            container_stats = container.stats(stream=False)
+
+            # Calculate CPU percentage
+            cpu_total = float(container_stats["cpu_stats"]["cpu_usage"]["total_usage"])
+            cpu_delta = cpu_total - float(
+                container_stats["precpu_stats"]["cpu_usage"]["total_usage"]
+            )
+            system_delta = float(
+                container_stats["cpu_stats"]["system_cpu_usage"]
+            ) - float(container_stats["precpu_stats"]["system_cpu_usage"])
+            online_cpus = container_stats["cpu_stats"].get(
+                "online_cpus",
+                len(container_stats["cpu_stats"]["cpu_usage"].get("percpu_usage", [1])),
+            )
+
+            cpu_percent = 0.0
+            if system_delta > 0.0:
+                cpu_percent = (cpu_delta / system_delta) * 100.0 * online_cpus
+
+            # Memory usage
+            mem_usage = container_stats["memory_stats"].get("usage", 0)
+            mem_limit = container_stats["memory_stats"].get("limit", 1)
+            mem_percent = (mem_usage / mem_limit) * 100.0
+            mem_mb = mem_usage / (1024 * 1024)
+
+            # Network usage
+            net_usage = container_stats.get("networks", {})
+            network_in = sum([net.get("rx_bytes", 0) for net in net_usage.values()])
+            network_out = sum([net.get("tx_bytes", 0) for net in net_usage.values()])
+
+            return {
+                "name": container.name,
+                "cpu_percent": f"{cpu_percent:.2f}%",
+                "memory_usage": f"{mem_mb:.2f} MB ({mem_percent:.2f}%)",
+                "network_io": f"IN: {network_in/1024:.2f} KB / OUT: {network_out/1024:.2f} KB",
+            }
+
+        except Exception:
+            return {
+                "name": container.name,
+                "cpu_percent": "N/A",
+                "memory_usage": "N/A",
+                "network_io": "N/A",
+            }
 
     def check_auth(self, request):
         """Check if user is authenticated (only if auth is enabled)"""
@@ -312,14 +403,28 @@ class DockerStatsView(TemplateView):
                 {"success": False, "error": "Authentication is disabled"}
             )
 
+        # Slow down password guessing: lock out an address after repeated failures
+        failures_key = f"login-failures:{request.META.get('REMOTE_ADDR')}"
+        if cache.get(failures_key, 0) >= LOGIN_MAX_FAILURES:
+            return JsonResponse(
+                {
+                    "success": False,
+                    "error": "Too many failed attempts. Try again in a few minutes.",
+                },
+                status=429,
+            )
+
         username = request.POST.get("username")
         password = request.POST.get("password")
 
         user = authenticate(request, username=username, password=password)
         if user is not None:
+            cache.delete(failures_key)
             login(request, user)
             return JsonResponse({"success": True})
         else:
+            cache.add(failures_key, 0, LOGIN_LOCKOUT_SECONDS)
+            cache.incr(failures_key)
             return JsonResponse({"success": False, "error": "Invalid credentials"})
 
     def get(self, request, *args, **kwargs):
@@ -330,10 +435,57 @@ class DockerStatsView(TemplateView):
                 return JsonResponse({"error": "Not authenticated"}, status=401)
 
             if request.GET.get("type") == "stats":
-                return JsonResponse({"stats": self.get_container_stats()})
+                return JsonResponse(
+                    {"stats": STATS_RESULT.get(self.get_container_stats)}
+                )
             elif request.GET.get("type") == "graph":
-                return JsonResponse({"graph": self.generate_network_graph()})
+                return JsonResponse(
+                    {"graph": GRAPH_RESULT.get(self.generate_network_graph)}
+                )
 
         # For normal page loads, render the template
         context = self.get_context_data(**kwargs)
         return self.render_to_response(context)
+
+
+def sse_event(data, event=None):
+    lines = [f"event: {event}"] if event else []
+    lines.append(f"data: {json.dumps(data)}")
+    return "\n".join(lines) + "\n\n"
+
+
+_view = DockerStatsView()
+BROADCASTERS = {
+    "stats": Broadcaster(lambda: {"stats": _view.get_container_stats()}),
+    "graph": Broadcaster(lambda: {"graph": _view.generate_network_graph()}),
+}
+
+
+async def stats_stream(request):
+    """Server-Sent Events stream of container stats or the network graph, pushed every second."""
+    broadcaster = BROADCASTERS.get(request.GET.get("type"))
+    if broadcaster is None:
+        return JsonResponse({"error": "type must be 'stats' or 'graph'"}, status=400)
+
+    if is_auth_enabled() and not (await request.auser()).is_authenticated:
+        # EventSource can't read status codes, so say why in the stream itself;
+        # the page then closes it and shows the login form
+        async def unauthorized():
+            yield sse_event({"error": "Not authenticated"}, event="unauthorized")
+
+        events = unauthorized()
+    else:
+
+        async def updates():
+            # Reconnect after 3s if the connection drops
+            yield "retry: 3000\n\n"
+            async for data in broadcaster.listen():
+                yield sse_event(data)
+
+        events = updates()
+
+    response = StreamingHttpResponse(events, content_type="text/event-stream")
+    response["Cache-Control"] = "no-cache"
+    # Stop nginx and similar reverse proxies from buffering the stream
+    response["X-Accel-Buffering"] = "no"
+    return response

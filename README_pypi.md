@@ -18,6 +18,25 @@ dStats.server
 ```bash
 USE_AUTH=true AUTH_USERNAME=<your_username> AUTH_PASSWORD=<your_password> dStats.server
 ```
+## Configuration
+All settings are environment variables (or a `.env` file in the working directory).
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `USE_AUTH`, `AUTH_USERNAME`, `AUTH_PASSWORD` | off | Require a login. Changing `AUTH_PASSWORD` or `AUTH_USERNAME` takes effect on restart and revokes the old credentials. |
+| `DSTATS_HOST` | `127.0.0.1` without auth, `0.0.0.0` with auth (always `0.0.0.0` in the Docker image) | Interface to listen on. Without auth, dStats is only reachable from the same machine unless you set this. |
+| `DSTATS_PORT` | `2743` | Port to listen on. |
+| `ALLOWED_HOSTS` | localhost names without auth, otherwise `*` | Comma-separated host names dStats answers to. |
+| `CSRF_TRUSTED_ORIGINS` | none | Required for logging in over HTTPS behind a reverse proxy, e.g. `https://stats.example.com`. |
+| `SECURE_COOKIES` | `false` | Set to `true` when serving over HTTPS. |
+| `SECRET_KEY` | random per start | Set it to keep users logged in across restarts. |
+| `DEBUG` | `false` | Development only; never enable on a reachable server. |
+
+After 5 failed logins from one address, logins from it are refused for 5 minutes.
+
+> **Security note:** dStats needs the Docker socket, and access to it is equivalent to root on the host.
+> Expose dStats beyond your own machine only with authentication enabled, ideally behind HTTPS.
+
 ## **Access the Application(Running on port 2743)**
 - Open your browser and go to:  
   **http://localhost:2743**

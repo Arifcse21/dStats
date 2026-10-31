@@ -1,10 +1,10 @@
 [build-system]
-requires = ["setuptools>=61.0", "wheel"]
+requires = ["setuptools>=61.0", "wheel", "setuptools-rust>=1.9"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "dStats"
-version = "1.0.7"
+version = "1.0.8"
 description = "A real-time web-based monitoring tool that provides performance stats for Docker containers and visualizes their network connectivity graph"
 readme = "README_pypi.md"
 license = {text = "MIT License"}
@@ -54,3 +54,12 @@ include = ["dStats*", "authboot*"]
 
 [tool.setuptools.package-data]
 dStats = ["**/*.py", "**/*.txt", "**/*.md", "**/*.html", "**/*.css", "**/*.js", "**/*.in", "LICENSE"]
+[tool.cibuildwheel]
+# The extension uses the stable ABI (abi3), so one cp312 build per platform covers Python 3.12+
+build = "cp312-*"
+skip = "*-win32 *_i686"
+test-command = "python -c \"import dStats._rust\""
+
+[tool.cibuildwheel.linux]
+before-all = "curl -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal"
+environment = { PATH = "$HOME/.cargo/bin:$PATH" }

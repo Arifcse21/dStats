@@ -2,7 +2,10 @@
 <html>
 <head>
     <title>Docker Stats</title>
-    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <!-- integrity: the browser refuses the script if the CDN ever serves anything else -->
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"
+            integrity="sha384-vtXRMe3mGCbOeY7l30aIg8H9p3GdeSe4IFlP6G8JMa7o7lXvnz3GFKzPxzJdPfGK"
+            crossorigin="anonymous"></script>
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -312,8 +315,8 @@
             let isAuthenticated = true;
         {% endif %}
 
-        let updateStatsInterval = null;
-        let updateGraphInterval = null;
+        let statsStream = null;
+        let graphStream = null;
 
         $(document).ready(function() {
             if (authEnabled && !isAuthenticated) {
@@ -351,85 +354,94 @@
                         submitButton.prop('disabled', false).text('Login');
                     }
                 },
-                error: function() {
-                    $('#errorMessage').text('An error occurred. Please try again.').show();
+                error: function(xhr) {
+                    // e.g. the lockout message after too many failed attempts
+                    const message = (xhr.responseJSON && xhr.responseJSON.error) || 'An error occurred. Please try again.';
+                    $('#errorMessage').text(message).show();
                     submitButton.prop('disabled', false).text('Login');
                 }
             });
         });
 
-        function updateStats() {
-            $.get('{% url "stats" %}', { type: 'stats' })
-                .done(function(data) {
-                    if (!authEnabled || isAuthenticated) {
-                        const tbody = $('#statsTable tbody');
-                        tbody.empty();
+        function renderStats(data) {
+            const tbody = $('#statsTable tbody');
+            tbody.empty();
 
-                        data.stats.forEach(function(container) {
-                            tbody.append(`
-                                <tr>
-                                    <td>${container.name}</td>
-                                    <td>${container.cpu_percent}</td>
-                                    <td>${container.memory_usage}</td>
-                                    <td>${container.network_io}</td>
-                                </tr>
-                            `);
-                        });
-                    }
-                })
-                .fail(function(xhr) {
-                    // Only handle auth errors if auth is enabled
-                    if (authEnabled && xhr.status === 401) {
-                        $('#loginModal').show();
-                        stopStats();
-                        stopGraph();
-                        isAuthenticated = false; // Update the JS variable
-                    }
-                    console.error('Error fetching stats:', xhr);
-                });
+            data.stats.forEach(function(container) {
+                // .text() escapes values instead of injecting them as HTML
+                tbody.append($('<tr>').append(
+                    $('<td>').text(container.name),
+                    $('<td>').text(container.cpu_percent),
+                    $('<td>').text(container.memory_usage),
+                    $('<td>').text(container.network_io)
+                ));
+            });
         }
 
-        function updateGraph() {
-            $.get('{% url "stats" %}', { type: 'graph' })
-                .done(function(data) {
-                    if (!authEnabled || isAuthenticated) {
-                        $('#networkGraph').attr('src', 'data:image/png;base64,' + data.graph);
-                    }
-                })
-                .fail(function(xhr) {
-                    // Only handle auth errors if auth is enabled
-                    if (authEnabled && xhr.status === 401) {
-                        $('#loginModal').show();
-                        stopStats();
-                        stopGraph();
-                        isAuthenticated = false;
-                    }
-                    console.error('Error fetching graph:', xhr);
+        function renderGraph(data) {
+            $('#networkGraph').attr('src', 'data:image/png;base64,' + data.graph);
+        }
+
+        // The server pushes a fresh update every second over Server-Sent Events
+        function openStream(type, render) {
+            const stream = { source: null, retryTimer: null };
+
+            (function connect() {
+                const source = new EventSource('{% url "stream" %}?type=' + type);
+                stream.source = source;
+
+                source.onmessage = function(event) {
+                    render(JSON.parse(event.data));
+                };
+
+                source.addEventListener('unauthorized', function() {
+                    source.close();
+                    $('#loginModal').show();
+                    stopStats();
+                    stopGraph();
+                    isAuthenticated = false;
                 });
+
+                source.onerror = function() {
+                    // The browser reconnects by itself after network drops; it only
+                    // gives up (CLOSED) on an error response, so retry those ourselves
+                    if (source.readyState === EventSource.CLOSED) {
+                        console.error('Lost ' + type + ' stream, retrying in 3s');
+                        stream.retryTimer = setTimeout(connect, 3000);
+                    }
+                };
+            })();
+
+            return stream;
+        }
+
+        function closeStream(stream) {
+            if (stream) {
+                clearTimeout(stream.retryTimer);
+                stream.source.close();
+            }
         }
 
         function startStats() {
-            if (!updateStatsInterval && (!authEnabled || isAuthenticated)) {
-                updateStats();
-                updateStatsInterval = setInterval(updateStats, 1000);
+            if (!statsStream && (!authEnabled || isAuthenticated)) {
+                statsStream = openStream('stats', renderStats);
             }
         }
 
         function startGraph() {
-            if (!updateGraphInterval && (!authEnabled || isAuthenticated)) {
-                updateGraph();
-                updateGraphInterval = setInterval(updateGraph, 1000);
+            if (!graphStream && (!authEnabled || isAuthenticated)) {
+                graphStream = openStream('graph', renderGraph);
             }
         }
 
         function stopStats() {
-            clearInterval(updateStatsInterval);
-            updateStatsInterval = null;
+            closeStream(statsStream);
+            statsStream = null;
         }
 
         function stopGraph() {
-            clearInterval(updateGraphInterval);
-            updateGraphInterval = null;
+            closeStream(graphStream);
+            graphStream = null;
         }
 
         // Button handlers

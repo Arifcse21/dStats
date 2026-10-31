@@ -9,3 +9,7 @@ recursive-include dStats *
 recursive-include authboot *
 
 recursive-include dStats/examples *.png
+# Rust accelerator sources, so building from the sdist can compile it
+include setup.py
+recursive-include rust *
+prune rust/target

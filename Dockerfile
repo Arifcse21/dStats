@@ -2,6 +2,8 @@ FROM python:3.13-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
+# Listen on all interfaces inside the container; `-p` decides what the host exposes
+ENV DSTATS_HOST=0.0.0.0
 
 WORKDIR /dStats
 

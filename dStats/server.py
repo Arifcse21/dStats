@@ -4,6 +4,7 @@ import sys
 import signal
 import subprocess
 from daphne.cli import CommandLineInterface
+from decouple import config
 
 DB_FILE = "dStats.sqlite3"
 
@@ -30,7 +31,35 @@ def main():
     signal.signal(signal.SIGINT, signal_handler)  # Ctrl+C
     signal.signal(signal.SIGTERM, signal_handler)  # Termination signal
 
-    command = ["daphne", "-b", "0.0.0.0", "-p", "2743", "dStats.asgi:application"]
+    from dStats.settings import is_auth_enabled, is_loopback, listen_host
+
+    host = listen_host()
+    port = config("DSTATS_PORT", default="2743")
+
+    if not is_auth_enabled():
+        if is_loopback(host):
+            print(
+                f"dStats is only reachable from this machine (http://localhost:{port}).\n"
+                "To open it to your network, set AUTH_USERNAME and AUTH_PASSWORD with "
+                "USE_AUTH=true,\nor set DSTATS_HOST=0.0.0.0 to expose it without a login."
+            )
+        else:
+            print(
+                f"\033[91mWARNING: authentication is off and dStats listens on {host}:{port}; "
+                "anyone who can reach it can see your containers.\033[0m"
+            )
+
+    # Same interpreter as dStats, so it works without an activated virtualenv
+    command = [
+        sys.executable,
+        "-m",
+        "daphne",
+        "-b",
+        host,
+        "-p",
+        port,
+        "dStats.asgi:application",
+    ]
 
     try:
         subprocess.run(command)

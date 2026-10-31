@@ -18,9 +18,10 @@ Including another URLconf
 from django.contrib import admin
 from django.urls import path
 from django.contrib.auth.views import LogoutView
-from dStats.views import DockerStatsView
+from dStats.views import DockerStatsView, stats_stream
 
 urlpatterns = [
     path("", DockerStatsView.as_view(), name="stats"),
+    path("stream/", stats_stream, name="stream"),
     path("logout/", LogoutView.as_view(next_page="stats"), name="logout"),
 ]
