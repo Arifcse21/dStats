@@ -30,3 +30,10 @@ Dockerfile
 .dockerignore
 .gitignore
 README.md
+
+# Keep local state, secrets and build output out of the image
+.env
+.venv/
+*.sqlite3
+build/
+rust/target/

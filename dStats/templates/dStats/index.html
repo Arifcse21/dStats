@@ -218,6 +218,54 @@
             display: none;
         }
 
+        .navbar-right {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+
+        /* Which engine the dashboard shows: a badge for one, a toggle for several */
+        .engine-badge {
+            padding: 6px 12px;
+            border-radius: 5px;
+            background: white;
+            color: #333;
+            font-weight: bold;
+        }
+
+        .engine-toggle {
+            display: inline-flex;
+            border-radius: 5px;
+            overflow: hidden;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.15);
+        }
+
+        .engine-toggle button {
+            padding: 8px 16px;
+            border: none;
+            background: white;
+            color: #333;
+            font-weight: bold;
+            cursor: pointer;
+        }
+
+        .engine-toggle button + button {
+            border-left: 1px solid #ddd;
+        }
+
+        .engine-toggle button.active {
+            background: #007bff;
+            color: white;
+        }
+
+        .panel-message {
+            color: #721c24;
+            background-color: #f8d7da;
+            border: 1px solid #f5c6cb;
+            padding: 10px;
+            border-radius: 5px;
+        }
+
         .logout-button {
             padding: 8px 16px;
             background-color: #dc3545;
@@ -259,7 +307,16 @@
 
     <div class="header">
         <h1 style="margin: 0;">Docker Stats and Network Visualizer</h1>
-        <div>
+        <div class="navbar-right">
+            {% if engines|length > 1 %}
+                <div class="engine-toggle" role="group" aria-label="Container engine">
+                    {% for engine in engines %}
+                        <button type="button" data-engine="{{ engine.name }}">{{ engine.label }}</button>
+                    {% endfor %}
+                </div>
+            {% else %}
+                <span class="engine-badge">Engine: {{ engines.0.label }}</span>
+            {% endif %}
             {% if auth_enabled and user.is_authenticated %}
                 <span style="margin-right: 15px; color: #333;">Welcome, {{ user.username }}</span>
                 <form method="post" action="{% url 'logout' %}" style="display: inline;">
@@ -278,7 +335,7 @@
 
     <div class="container">
         <div class="stats-panel" id="statsPanel">
-            <h2>Container Stats</h2>
+            <h2>Container Stats <span class="engine-name"></span></h2>
             <table id="statsTable">
                 <thead>
                     <tr>
@@ -294,8 +351,9 @@
         </div>
 
         <div class="graph-panel" id="graphPanel">
-            <h2>Network Visualization</h2>
-            <img id="networkGraph" class="graph-image" src="" alt="Docker Network Graph">
+            <h2>Network Visualization <span class="engine-name"></span></h2>
+            <p id="graphMessage" class="panel-message" style="display: none;"></p>
+            <img id="networkGraph" class="graph-image" src="" alt="Network graph">
         </div>
     </div>
 
@@ -306,8 +364,18 @@
         </a>
     </footer>
 
+    {{ engines|json_script:"engines-data" }}
     <script>
         let authEnabled = {{ auth_enabled|lower }};
+        const engines = JSON.parse($('#engines-data').text());
+        let currentEngine = engines[0].name;
+        try {
+            // Remember the last engine viewed in this browser
+            const saved = localStorage.getItem('dstats-engine');
+            if (engines.some(e => e.name === saved)) {
+                currentEngine = saved;
+            }
+        } catch (e) {}
 
         {% if auth_enabled %}
             let isAuthenticated = {{ user.is_authenticated|lower }};
@@ -319,6 +387,8 @@
         let graphStream = null;
 
         $(document).ready(function() {
+            // No streams are open yet, so this only marks the engine in the navbar
+            selectEngine(currentEngine);
             if (authEnabled && !isAuthenticated) {
                 $('#loginModal').show();
             } else {
@@ -363,7 +433,24 @@
             });
         });
 
+        function showTableMessage(message, isError) {
+            const cell = $('<td colspan="4">').text(message);
+            if (isError) {
+                cell.addClass('panel-message');
+            }
+            $('#statsTable tbody').empty().append($('<tr>').append(cell));
+        }
+
         function renderStats(data) {
+            if (data.error) {
+                showTableMessage(data.error, true);
+                return;
+            }
+            if (data.stats.length === 0) {
+                showTableMessage('No running containers.', false);
+                return;
+            }
+
             const tbody = $('#statsTable tbody');
             tbody.empty();
 
@@ -379,15 +466,58 @@
         }
 
         function renderGraph(data) {
-            $('#networkGraph').attr('src', 'data:image/png;base64,' + data.graph);
+            if (data.error) {
+                $('#networkGraph').hide();
+                $('#graphMessage').text(data.error).show();
+                return;
+            }
+            $('#graphMessage').hide();
+            $('#networkGraph').attr('src', 'data:image/png;base64,' + data.graph).show();
         }
+
+        function selectEngine(name) {
+            currentEngine = name;
+            try {
+                localStorage.setItem('dstats-engine', name);
+            } catch (e) {}
+
+            const label = engines.find(e => e.name === name).label;
+            $('.engine-name').text(engines.length > 1 ? '(' + label + ')' : '');
+            $('.engine-toggle button').each(function() {
+                $(this).toggleClass('active', $(this).data('engine') === name)
+                    .attr('aria-pressed', $(this).data('engine') === name);
+            });
+
+            // Reopen whichever streams are showing, now for the selected engine
+            const statsOn = !!statsStream;
+            const graphOn = !!graphStream;
+            stopStats();
+            stopGraph();
+            if (statsOn) {
+                showTableMessage('Loading ' + label + ' containers…', false);
+                startStats();
+            }
+            if (graphOn) {
+                $('#networkGraph').hide().attr('src', '');
+                $('#graphMessage').hide();
+                startGraph();
+            }
+        }
+
+        $('.engine-toggle button').on('click', function() {
+            if ($(this).data('engine') !== currentEngine) {
+                selectEngine($(this).data('engine'));
+            }
+        });
 
         // The server pushes a fresh update every second over Server-Sent Events
         function openStream(type, render) {
             const stream = { source: null, retryTimer: null };
 
             (function connect() {
-                const source = new EventSource('{% url "stream" %}?type=' + type);
+                const source = new EventSource(
+                    '{% url "stream" %}?type=' + type + '&engine=' + encodeURIComponent(currentEngine)
+                );
                 stream.source = source;
 
                 source.onmessage = function(event) {

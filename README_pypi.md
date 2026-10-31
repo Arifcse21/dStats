@@ -26,6 +26,7 @@ All settings are environment variables (or a `.env` file in the working director
 | `USE_AUTH`, `AUTH_USERNAME`, `AUTH_PASSWORD` | off | Require a login. Changing `AUTH_PASSWORD` or `AUTH_USERNAME` takes effect on restart and revokes the old credentials. |
 | `DSTATS_HOST` | `127.0.0.1` without auth, `0.0.0.0` with auth (always `0.0.0.0` in the Docker image) | Interface to listen on. Without auth, dStats is only reachable from the same machine unless you set this. |
 | `DSTATS_PORT` | `2743` | Port to listen on. |
+| `DSTATS_ENGINE` (or `--engine`) | `docker` | Engines to monitor: `docker`, `podman`, or `docker,podman` for both. |
 | `ALLOWED_HOSTS` | localhost names without auth, otherwise `*` | Comma-separated host names dStats answers to. |
 | `CSRF_TRUSTED_ORIGINS` | none | Required for logging in over HTTPS behind a reverse proxy, e.g. `https://stats.example.com`. |
 | `SECURE_COOKIES` | `false` | Set to `true` when serving over HTTPS. |
@@ -36,6 +37,30 @@ After 5 failed logins from one address, logins from it are refused for 5 minutes
 
 > **Security note:** dStats needs the Docker socket, and access to it is equivalent to root on the host.
 > Expose dStats beyond your own machine only with authentication enabled, ideally behind HTTPS.
+
+## Podman
+dStats talks to Podman through its Docker-compatible API. Enable it once:
+```bash
+systemctl --user enable --now podman.socket     # rootless; for rootful: sudo systemctl enable --now podman.socket
+```
+
+Then monitor Podman, or Docker and Podman together:
+```bash
+dStats.server --engine podman
+dStats.server --engine docker,podman             # toggle between them in the navbar
+```
+
+dStats finds the socket at `$XDG_RUNTIME_DIR/podman/podman.sock` (rootless) or `/run/podman/podman.sock` (rootful).
+Set `CONTAINER_HOST` to use another one; `DOCKER_HOST` does the same for Docker.
+Rootless Podman only shows the current user's containers.
+
+Running dStats itself in a container with Podman:
+```bash
+podman run -d --name dstats --security-opt label=disable \
+  -v $XDG_RUNTIME_DIR/podman/podman.sock:/run/podman/podman.sock \
+  -e DSTATS_ENGINE=podman -p 127.0.0.1:2743:2743 arifcse21/dstats:latest
+```
+(`label=disable` lets the container use the socket on SELinux systems such as Fedora.)
 
 ## **Access the Application(Running on port 2743)**
 - Open your browser and go to:  

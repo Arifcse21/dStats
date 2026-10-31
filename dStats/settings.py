@@ -4,6 +4,8 @@ from decouple import Csv, config
 from pathlib import Path
 from django.core.management.utils import get_random_secret_key
 
+from dStats.engines import engine_names
+
 
 def is_auth_enabled():
     HAS_USE_AUTH = config("USE_AUTH", "false").lower() in ("true", "1", "yes")
@@ -16,6 +18,10 @@ def is_auth_enabled():
         data = False
     # print(f"Auth enabled: {data}")
     return data
+
+
+# Fail at startup on a typo like DSTATS_ENGINE=podmn, not on the first request
+DSTATS_ENGINES = engine_names()
 
 
 def listen_host():

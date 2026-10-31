@@ -1,4 +1,5 @@
 # dStats/server.py
+import argparse
 import os
 import sys
 import signal
@@ -26,6 +27,27 @@ def signal_handler(signum, frame):
 
 
 def main():
+    parser = argparse.ArgumentParser(
+        prog="dStats.server",
+        description="Real-time stats and network graph for Docker and Podman containers.",
+    )
+    parser.add_argument(
+        "--engine",
+        help="container engine(s) to monitor: docker (default), podman, or docker,podman "
+        "for both; same as the DSTATS_ENGINE environment variable",
+    )
+    args = parser.parse_args()
+
+    from dStats.engines import configured_engines, parse_engines
+
+    if args.engine:
+        try:
+            parse_engines(args.engine)
+        except ValueError as e:
+            parser.error(str(e))
+        # Environment, so the daphne process started below sees it too
+        os.environ["DSTATS_ENGINE"] = args.engine
+
     os.environ.setdefault("DJANGO_SETTINGS_MODULE", "dStats.settings")
 
     signal.signal(signal.SIGINT, signal_handler)  # Ctrl+C
@@ -35,6 +57,22 @@ def main():
 
     host = listen_host()
     port = config("DSTATS_PORT", default="2743")
+
+    try:
+        engines = configured_engines()
+    except ValueError as e:
+        parser.error(f"DSTATS_ENGINE: {e}")
+    for engine in engines:
+        path = engine.url.removeprefix("unix://")
+        missing = engine.url.startswith("unix://") and not os.path.exists(path)
+        print(
+            f"Monitoring {engine.name} at {engine.url}"
+            + (" (not found yet)" if missing else "")
+        )
+        if missing and engine.name == "podman":
+            print(
+                "  Start Podman's API with: systemctl --user enable --now podman.socket"
+            )
 
     if not is_auth_enabled():
         if is_loopback(host):

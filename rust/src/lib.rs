@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 use std::sync::OnceLock;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use bollard::Docker;
 use bollard::query_parameters::StatsOptionsBuilder;
@@ -20,6 +20,9 @@ const MAX_CONCURRENT_REQUESTS: usize = 32;
 // A hung daemon or container must not hang the request forever
 const DOCKER_TIMEOUT: Duration = Duration::from_secs(10);
 
+// Gap between the two samples taken for engines that return only one (Podman)
+const PODMAN_SAMPLE_INTERVAL: Duration = Duration::from_secs(1);
+
 fn runtime() -> PyResult<&'static Runtime> {
     if let Some(rt) = RUNTIME.get() {
         return Ok(rt);
@@ -36,14 +39,21 @@ fn runtime() -> PyResult<&'static Runtime> {
 
 /// Fetch stats for all running containers concurrently.
 ///
+/// `host` is the engine's API address (e.g. unix:///run/podman/podman.sock);
+/// without it DOCKER_HOST or the default Docker socket is used.
+///
 /// Returns the same list of dicts as the Python implementation in dStats/views.py:
 /// name, cpu_percent, memory_usage, network_io.
 #[pyfunction]
-fn get_container_stats_parallel(py: Python<'_>) -> PyResult<Vec<HashMap<&'static str, String>>> {
+#[pyo3(signature = (host=None))]
+fn get_container_stats_parallel(
+    py: Python<'_>,
+    host: Option<String>,
+) -> PyResult<Vec<HashMap<&'static str, String>>> {
     let rt = runtime()?;
-    // Release the GIL while waiting on the Docker daemon
+    // Release the GIL while waiting on the engine
     let stats = py
-        .detach(|| rt.block_on(fetch_all_stats()))
+        .detach(|| rt.block_on(fetch_all_stats(host)))
         .map_err(PyRuntimeError::new_err)?;
 
     Ok(stats
@@ -77,9 +87,13 @@ impl ContainerStat {
     }
 }
 
-async fn fetch_all_stats() -> Result<Vec<ContainerStat>, String> {
-    // Honours DOCKER_HOST like docker.from_env() does
-    let docker = Docker::connect_with_defaults().map_err(|e| e.to_string())?;
+async fn fetch_all_stats(host: Option<String>) -> Result<Vec<ContainerStat>, String> {
+    let docker = match host {
+        Some(host) => Docker::connect_with_host(&host),
+        // Honours DOCKER_HOST like docker.from_env() does
+        None => Docker::connect_with_defaults(),
+    }
+    .map_err(|e| e.to_string())?;
 
     // Running containers only, same as client.containers.list()
     let containers = timeout(DOCKER_TIMEOUT, docker.list_containers(None))
@@ -106,40 +120,51 @@ async fn fetch_all_stats() -> Result<Vec<ContainerStat>, String> {
 }
 
 async fn fetch_single_stat(docker: Docker, id: String, name: String) -> ContainerStat {
-    // stream=false makes the daemon take two samples so precpu_stats is populated;
-    // with streaming the first sample has empty precpu_stats and the CPU % is wrong.
-    let options = StatsOptionsBuilder::default()
-        .stream(false)
-        .one_shot(false)
-        .build();
-
-    let stat = match timeout(DOCKER_TIMEOUT, docker.stats(&id, Some(options)).try_next()).await {
-        Ok(Ok(Some(s))) => s,
-        _ => return ContainerStat::unavailable(name),
+    let Some(mut stat) = sample_stats(&docker, &id).await else {
+        return ContainerStat::unavailable(name);
     };
 
-    let cpu_percent = match (stat.cpu_stats.as_ref(), stat.precpu_stats.as_ref()) {
-        (Some(cpu), Some(precpu)) => {
-            let total = |s: &bollard::models::ContainerCpuStats| {
-                s.cpu_usage
-                    .as_ref()
-                    .and_then(|u| u.total_usage)
-                    .unwrap_or(0)
-            };
-            let cpu_delta = total(cpu).saturating_sub(total(precpu)) as f64;
-            let system_delta =
-                cpu.system_cpu_usage
-                    .unwrap_or(0)
-                    .saturating_sub(precpu.system_cpu_usage.unwrap_or(0)) as f64;
-            let online_cpus = cpu.online_cpus.unwrap_or(1) as f64;
+    let total = |s: Option<&bollard::models::ContainerCpuStats>| {
+        s.and_then(|s| s.cpu_usage.as_ref())
+            .and_then(|u| u.total_usage)
+            .unwrap_or(0)
+    };
 
-            if system_delta > 0.0 {
-                (cpu_delta / system_delta) * 100.0 * online_cpus
-            } else {
-                0.0
-            }
+    // Docker samples twice for stream=false and fills precpu_stats; Podman returns a
+    // single sample with it empty, so take the second sample ourselves
+    let has_previous = stat
+        .precpu_stats
+        .as_ref()
+        .and_then(|p| p.system_cpu_usage)
+        .is_some_and(|usage| usage > 0);
+
+    let cpu_percent = if has_previous {
+        let (cpu, precpu) = (stat.cpu_stats.as_ref(), stat.precpu_stats.as_ref());
+        let cpu_delta = total(cpu).saturating_sub(total(precpu)) as f64;
+        let system_delta = cpu
+            .and_then(|c| c.system_cpu_usage)
+            .unwrap_or(0)
+            .saturating_sub(precpu.and_then(|p| p.system_cpu_usage).unwrap_or(0))
+            as f64;
+        let online_cpus = cpu.and_then(|c| c.online_cpus).unwrap_or(1) as f64;
+        if system_delta > 0.0 {
+            (cpu_delta / system_delta) * 100.0 * online_cpus
+        } else {
+            0.0
         }
-        _ => 0.0,
+    } else {
+        // Podman's system_cpu_usage isn't comparable to Docker's, so measure CPU time
+        // against wall-clock time between our two samples, like `podman stats` does
+        let first_total = total(stat.cpu_stats.as_ref());
+        let started = Instant::now();
+        tokio::time::sleep(PODMAN_SAMPLE_INTERVAL).await;
+        let Some(second) = sample_stats(&docker, &id).await else {
+            return ContainerStat::unavailable(name);
+        };
+        let elapsed_ns = started.elapsed().as_nanos() as f64;
+        stat = second;
+        let cpu_delta = total(stat.cpu_stats.as_ref()).saturating_sub(first_total) as f64;
+        cpu_delta / elapsed_ns * 100.0
     };
 
     let (mem_usage, mem_limit) = stat
@@ -170,6 +195,22 @@ async fn fetch_single_stat(docker: Docker, id: String, name: String) -> Containe
             network_in as f64 / 1024.0,
             network_out as f64 / 1024.0
         ),
+    }
+}
+
+async fn sample_stats(
+    docker: &Docker,
+    id: &str,
+) -> Option<bollard::models::ContainerStatsResponse> {
+    // stream=false: Docker takes two samples so precpu_stats is populated; with
+    // streaming the first sample has empty precpu_stats and the CPU % is wrong
+    let options = StatsOptionsBuilder::default()
+        .stream(false)
+        .one_shot(false)
+        .build();
+    match timeout(DOCKER_TIMEOUT, docker.stats(id, Some(options)).try_next()).await {
+        Ok(Ok(Some(stat))) => Some(stat),
+        _ => None,
     }
 }
 
