@@ -45,7 +45,6 @@ dependencies = [
 dev = [
     "black>=26.10.1",
     "uv>=0.2",
-    "twine>=4.0",
 ]
 
 [project.urls]
@@ -67,6 +66,11 @@ dStats = ["**/*.py", "**/*.txt", "**/*.md", "**/*.html", "**/*.css", "**/*.js", 
 build = "cp312-*"
 skip = "*-win32 *_i686"
 test-command = "python -c \"import dStats._rust\""
+
+[tool.cibuildwheel.macos]
+# Apple Silicon only: dStats' dependencies (cryptography, autobahn, cbor2) no longer
+# publish Intel macOS wheels, so an Intel build couldn't be installed or tested anyway
+archs = ["arm64"]
 
 [tool.cibuildwheel.linux]
 before-all = "curl -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal"

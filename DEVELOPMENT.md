@@ -28,7 +28,7 @@ git clone https://github.com/Arifcse21/dStats.git
 cd dStats
 python -m venv venv
 source venv/bin/activate
-pip install -e ".[dev]"     # editable install + black, uv, twine
+pip install -e ".[dev]"     # editable install + black, uv
 dStats.server               # http://localhost:2743
 ```
 
@@ -148,41 +148,46 @@ cargo install cargo-audit --locked && (cd rust && cargo audit)
 
 ---
 
-## 5. Build the Python package
+## 5. Python packages are built by CI
 
-```bash
-pip install build
-python -m build                                  # sdist + native wheel for this machine (needs Rust)
-DSTATS_PURE_PYTHON=1 python -m build --wheel     # pure-Python fallback wheel
-ls dist/
-```
+Don't build release packages on your machine: a local build only covers your own
+platform (and Linux wheels built that way are rejected by PyPI). The
+`.github/workflows/release.yml` workflow builds everything on every pull request and
+every `v*` tag:
 
-Wheels install anywhere with `pip install dist/<file>.whl`.
+| Package | Covers |
+|---|---|
+| Native wheels with the Rust accelerator | Linux x86_64 and aarch64 (glibc and musl), macOS Apple Silicon, Windows x64 |
+| Pure-Python wheel | every other platform (stats are collected by the Python fallback) |
+| sdist | building from source |
 
-**Don't upload these with twine.** A wheel built directly on Linux is tagged
-`linux_x86_64`, which PyPI rejects, and it would only cover your platform. To build the
-same portable `manylinux`/`musllinux` wheels CI produces, use cibuildwheel. It runs the
-build inside a container, using either engine:
+All native wheels use the stable ABI (`abi3`), so one wheel per platform covers Python 3.12+.
+Each one is installed and imported in a clean environment before it's accepted.
 
-```bash
-pip install "cibuildwheel>=3,<4"
-cibuildwheel --platform linux --output-dir wheelhouse                                # with Docker
-CIBW_CONTAINER_ENGINE=podman cibuildwheel --platform linux --output-dir wheelhouse   # with Podman
-```
+**Trying a build before releasing:** open the workflow run for your pull request
+(**Actions** tab, or run it by hand with **Run workflow**), download the `wheels-*` or
+`pure-and-sdist` artifact, and `pip install` the file for your platform.
+
+**Intel Macs** get the pure-Python wheel, but dStats' dependencies `cryptography`,
+`autobahn` and `cbor2` no longer publish Intel macOS wheels, so pip has to compile them
+(that needs Rust and Xcode's command-line tools). The container image is the easier route there.
 
 How the package is put together:
 
-- `pyproject.toml` holds the metadata, dependencies and cibuildwheel settings.
+- `pyproject.toml` holds the metadata, dependencies and cibuildwheel settings
+  (`[tool.cibuildwheel]`: which Python, platforms and architectures).
 - `setup.py` adds the Rust extension `dStats._rust` (from `rust/`) as **optional**:
-  building from source without Rust still installs dStats.
-- The extension uses the stable ABI (`abi3`), so one wheel per platform covers Python 3.12+.
+  building from source without Rust still installs dStats. `DSTATS_PURE_PYTHON=1`
+  leaves it out, which is how CI builds the pure wheel.
 - `rust/Cargo.lock` pins Rust dependencies; builds use `--locked`, so keep the lock file committed.
+- `dStats/static/dStats/vendor/` holds the bundled JavaScript libraries (see its README).
 
 ---
 
 ## 6. Publish a release
 
-Releases are built and published by `.github/workflows/release.yml`, not from your machine.
+One tag publishes the release to **PyPI** and creates a **GitHub Release** with the same
+files. Nothing is uploaded from your machine.
 
 ### One-time setup
 
@@ -198,23 +203,27 @@ No API tokens are stored anywhere.
 
 1. Bump `version` in `pyproject.toml` (and in `rust/Cargo.toml` if the Rust code changed).
 2. If dependencies changed, regenerate `requirements.txt` (section 8).
-3. Commit, push, and open a pull request: CI builds every wheel and runs both audits.
-4. When CI is green and merged, tag and push:
+3. Commit, push, and open a pull request: CI builds every package and runs both audits.
+4. When CI is green and merged, tag the version from `pyproject.toml` and push the tag:
 
    ```bash
    git tag v1.0.8
    git push origin v1.0.8
    ```
 
-5. The workflow builds:
-   - native wheels for Linux x86_64/aarch64 (glibc and musl), macOS universal2 and Windows x64
-   - a pure-Python wheel for every other platform
-   - the sdist
+5. The workflow then:
+   - builds all packages (section 5) and runs `cargo audit` and `pip-audit`;
+   - checks that the tag matches the built version, and stops if not, because PyPI never
+     accepts the same version twice;
+   - publishes to PyPI, with provenance attestations;
+   - creates the GitHub Release `v1.0.8` with the same wheels and sdist attached, and
+     release notes generated from the merged pull requests.
 
-   It then runs `cargo audit` and `pip-audit` and publishes everything to PyPI, with
-   provenance attestations.
+6. Check the release: `pip install --upgrade dStats` in a fresh virtualenv, and look at the
+   **Releases** page on GitHub.
 
-6. Check the release: `pip install --upgrade dStats` in a fresh virtualenv.
+If a tag was wrong, delete it (`git push --delete origin v1.0.8 && git tag -d v1.0.8`),
+fix the version, and tag again. A version that already reached PyPI can't be reused: bump it.
 
 Then publish the container image (section 7).
 
