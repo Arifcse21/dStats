@@ -15,13 +15,23 @@ Including another URLconf
     2. Add a URL to urlpatterns:  path('blog/', include('blog.urls'))
 """
 
+from pathlib import Path
+
 from django.contrib import admin
 from django.urls import path
+from django.views.static import serve
 from django.contrib.auth.views import LogoutView
 from dStats.views import DockerStatsView, stats_stream
 
 urlpatterns = [
     path("", DockerStatsView.as_view(), name="stats"),
     path("stream/", stats_stream, name="stream"),
+    # The bundled JS libraries; served here because Django only serves static
+    # files itself when DEBUG is on, and dStats runs without a separate web server
+    path(
+        "static/<path:path>",
+        serve,
+        {"document_root": Path(__file__).resolve().parent / "static"},
+    ),
     path("logout/", LogoutView.as_view(next_page="stats"), name="logout"),
 ]

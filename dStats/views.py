@@ -142,6 +142,7 @@ class Interface:
     endpoint_id: str
     address: str
     aliases: List[str]
+    network: str = ""
 
 
 @dataclass
@@ -251,6 +252,77 @@ class DockerStatsView(TemplateView):
         containers, links = self.get_containers(client)
         return networks, containers, links
 
+    def get_graph_data(self, engine=None):
+        """Topology for the interactive graph: container and network nodes, and an
+        edge for every container's connection to a network."""
+        results = collect_from_engines(self.get_network_data, engine)
+        multiple = len(results) > 1
+        nodes, edges = [], []
+
+        for engine, (networks, containers, links) in results:
+            # IDs carry the engine when combined, so both can have e.g. a "bridge" network
+            prefix = f"{engine.name}:" if multiple else ""
+            # Only networks something is attached to; skips Docker's empty none/host/bridge
+            used = {
+                link.network_name
+                for link in links
+                if link.network_name in networks and link.network_name != "none"
+            }
+
+            for net in networks.values():
+                if net.name in used:
+                    nodes.append(
+                        {
+                            "data": {
+                                "id": f"{prefix}net:{net.name}",
+                                "kind": "network",
+                                "name": net.name,
+                                "subnet": net.gateway,
+                                "internal": net.internal,
+                                "isolated": net.isolated,
+                            }
+                        }
+                    )
+
+            for container in containers:
+                nodes.append(
+                    {
+                        "data": {
+                            "id": f"{prefix}ctr:{container.container_id}",
+                            "kind": "container",
+                            "name": container.name,
+                            # host port -> container port, like `docker ps`
+                            "ports": [
+                                f"{p.external}\u2192{p.internal}/{p.protocol}"
+                                for p in container.ports
+                            ],
+                            "interfaces": [
+                                {
+                                    "network": i.network,
+                                    "address": i.address,
+                                    "aliases": i.aliases or [],
+                                }
+                                for i in container.interfaces
+                            ],
+                        }
+                    }
+                )
+
+            for link in links:
+                if link.network_name in used:
+                    edges.append(
+                        {
+                            "data": {
+                                "id": f"{prefix}link:{link.container_id}:{link.network_name}",
+                                "source": f"{prefix}ctr:{link.container_id}",
+                                "target": f"{prefix}net:{link.network_name}",
+                                "network": link.network_name,
+                            }
+                        }
+                    )
+
+        return {"nodes": nodes, "edges": edges}
+
     def generate_network_graph(self, engine=None):
         results = collect_from_engines(self.get_network_data, engine)
         # Only a combined graph (the JSON API without an engine) needs engine labels
@@ -329,7 +401,7 @@ class DockerStatsView(TemplateView):
                 endpoint_id = net_info["EndpointID"]
                 aliases = net_info.get("Aliases", [])
                 interfaces.append(
-                    Interface(endpoint_id, net_info["IPAddress"], aliases)
+                    Interface(endpoint_id, net_info["IPAddress"], aliases, net_name)
                 )
                 links.append(Link(container.id, endpoint_id, net_name))
 
@@ -567,7 +639,7 @@ def sse_event(data, event=None):
 _view = DockerStatsView()
 COLLECTORS = {
     "stats": lambda engine: {"stats": _view.get_container_stats(engine)},
-    "graph": lambda engine: {"graph": _view.generate_network_graph(engine)},
+    "graph": lambda engine: {"graph": _view.get_graph_data(engine)},
 }
 
 # One broadcaster per (type, engine), created when first watched: an engine

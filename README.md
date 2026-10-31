@@ -108,7 +108,7 @@ podman run -d --name dstats --security-opt label=disable \
 
 Here, you’ll find:
 1. **Container Stats:** Real-time CPU, memory, and network I/O usage.
-2. **Network Graph:** Visualization of container interconnections.
+2. **Network Graph:** Interactive map of containers and networks: zoom, pan and drag inside the panel, click for details.
 
 ---
 
@@ -117,6 +117,8 @@ Here, you’ll find:
 Thank you for considering contributing to dStats! We appreciate all efforts, big or small, to help improve the project.
 
 ### **How to Contribute**
+
+Setting up a development checkout, building packages, releasing, and working with Docker and Podman are covered in [DEVELOPMENT.md](DEVELOPMENT.md).
 
 We believe collaboration is key to building great software. Here’s how you can get involved:
 

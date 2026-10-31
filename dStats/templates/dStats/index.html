@@ -1,11 +1,11 @@
+{% load static %}
 <!DOCTYPE html>
 <html>
 <head>
     <title>Docker Stats</title>
-    <!-- integrity: the browser refuses the script if the CDN ever serves anything else -->
-    <script src="https://code.jquery.com/jquery-3.6.0.min.js"
-            integrity="sha384-vtXRMe3mGCbOeY7l30aIg8H9p3GdeSe4IFlP6G8JMa7o7lXvnz3GFKzPxzJdPfGK"
-            crossorigin="anonymous"></script>
+    <!-- Bundled with dStats (see static/dStats/vendor/README.md): no internet needed -->
+    <script src="{% static 'dStats/vendor/jquery-3.6.0.min.js' %}"></script>
+    <script src="{% static 'dStats/vendor/cytoscape-3.30.4.min.js' %}"></script>
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -78,9 +78,56 @@
             background-color: #f5f5f5;
         }
 
-        .graph-image {
+        .graph-panel {
+            min-width: 0;  /* let the canvas shrink with the panel */
+        }
+
+        .graph-toolbar {
+            display: flex;
+            gap: 6px;
+            margin-bottom: 8px;
+            align-items: center;
+        }
+
+        .graph-toolbar button {
+            padding: 4px 10px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            background: white;
+            cursor: pointer;
+            font-weight: bold;
+        }
+
+        .graph-toolbar button:hover {
+            background: #f0f0f0;
+        }
+
+        .graph-hint {
+            margin-left: auto;
+            color: #777;
+            font-size: 12px;
+        }
+
+        /* Zoom and pan happen inside this box only; the page itself never zooms */
+        #networkCanvas {
             width: 100%;
-            height: auto;
+            height: 520px;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            background: #fafafa;
+            touch-action: none;
+        }
+
+        #graphDetails {
+            margin-top: 8px;
+            font-size: 13px;
+            color: #333;
+            min-height: 1.4em;
+        }
+
+        #graphDetails ul {
+            margin: 4px 0 0;
+            padding-left: 18px;
         }
 
         .button-group {
@@ -353,7 +400,15 @@
         <div class="graph-panel" id="graphPanel">
             <h2>Network Visualization <span class="engine-name"></span></h2>
             <p id="graphMessage" class="panel-message" style="display: none;"></p>
-            <img id="networkGraph" class="graph-image" src="" alt="Network graph">
+            <div class="graph-toolbar">
+                <button type="button" id="zoomIn" title="Zoom in">+</button>
+                <button type="button" id="zoomOut" title="Zoom out">&minus;</button>
+                <button type="button" id="zoomFit" title="Show everything">Fit</button>
+                <button type="button" id="tidyGraph" title="Re-arrange all nodes">Tidy</button>
+                <span class="graph-hint">Scroll to zoom &middot; drag to pan &middot; drag a block to move it</span>
+            </div>
+            <div id="networkCanvas"></div>
+            <div id="graphDetails">Click a container or network for details.</div>
         </div>
     </div>
 
@@ -465,15 +520,204 @@
             });
         }
 
+        // ---- Network graph: an interactive Cytoscape canvas ----
+        const NETWORK_COLORS = ['#1f78b4', '#33a02c', '#e31a1c', '#ff7f00', '#6a3d9a',
+                                '#b15928', '#1b9e77', '#d95f02', '#7570b3', '#e7298a'];
+        let graph = null;
+        let graphSignature = null;
+
+        // Each network keeps the color it first got, and gets an unused one while any are left
+        const assignedColors = new Map();
+
+        function networkColor(name) {
+            if (!assignedColors.has(name)) {
+                const used = new Set(assignedColors.values());
+                const free = NETWORK_COLORS.find(c => !used.has(c));
+                assignedColors.set(name, free || NETWORK_COLORS[assignedColors.size % NETWORK_COLORS.length]);
+            }
+            return assignedColors.get(name);
+        }
+
+        function decorate(element) {
+            const d = element.data;
+            if (d.kind === 'network') {
+                d.color = networkColor(d.name);
+                d.label = d.name + '\n' + d.subnet;
+            } else if (d.kind === 'container') {
+                d.label = d.ports.length ? d.name + '\n' + d.ports.join('  ') : d.name;
+            } else {
+                d.color = networkColor(d.network);
+            }
+            return element;
+        }
+
+        function createGraph() {
+            graph = cytoscape({
+                container: document.getElementById('networkCanvas'),
+                boxSelectionEnabled: false,
+                // ~1.45x per mouse-wheel notch; the default (2.5x) jumps too far
+                wheelSensitivity: 0.4,
+                minZoom: 0.1,
+                maxZoom: 4,
+                style: [
+                    {
+                        selector: 'node[kind = "container"]',
+                        style: {
+                            'shape': 'round-rectangle',
+                            'background-color': '#ffffff',
+                            'border-width': 2,
+                            'border-color': '#d9534f',
+                            'label': 'data(label)',
+                            'text-wrap': 'wrap',
+                            'text-valign': 'center',
+                            'font-size': 11,
+                            'width': 'label',
+                            'height': 'label',
+                            'padding': '8px'
+                        }
+                    },
+                    {
+                        selector: 'node[kind = "network"]',
+                        style: {
+                            'shape': 'ellipse',
+                            'background-color': 'data(color)',
+                            'label': 'data(label)',
+                            'text-wrap': 'wrap',
+                            'text-valign': 'center',
+                            'color': '#ffffff',
+                            'text-outline-color': 'data(color)',
+                            'text-outline-width': 2,
+                            'font-size': 11,
+                            'font-weight': 'bold',
+                            'width': 'label',
+                            'height': 'label',
+                            'padding': '14px'
+                        }
+                    },
+                    {
+                        selector: 'edge',
+                        style: {
+                            'width': 2,
+                            'line-color': 'data(color)',
+                            'curve-style': 'bezier',
+                            'opacity': 0.8
+                        }
+                    },
+                    {
+                        selector: ':selected',
+                        style: { 'border-width': 4, 'border-color': '#007bff' }
+                    }
+                ]
+            });
+
+            graph.on('tap', 'node', function(event) {
+                showGraphDetails(event.target.data());
+            });
+            graph.on('tap', function(event) {
+                if (event.target === graph) {
+                    $('#graphDetails').text('Click a container or network for details.');
+                }
+            });
+        }
+
+        function showGraphDetails(d) {
+            const box = $('#graphDetails').empty();
+            const list = $('<ul>');
+            if (d.kind === 'container') {
+                box.append($('<strong>').text(d.name));
+                d.interfaces.forEach(function(i) {
+                    const aliases = i.aliases.length ? ' (' + i.aliases.join(', ') + ')' : '';
+                    list.append($('<li>').text(i.network + ': ' + (i.address || 'no IP') + aliases));
+                });
+                if (d.ports.length) {
+                    list.append($('<li>').text('Ports (host \u2192 container): ' + d.ports.join(', ')));
+                }
+            } else {
+                box.append($('<strong>').text('Network ' + d.name));
+                const attached = graph.getElementById(d.id).neighborhood('node');
+                list.append($('<li>').text('Subnet: ' + d.subnet));
+                list.append($('<li>').text(attached.length + ' container(s): ' +
+                    attached.map(n => n.data('name')).join(', ')));
+                if (d.internal) list.append($('<li>').text('Internal (no outside access)'));
+                if (d.isolated) list.append($('<li>').text('Containers isolated from each other'));
+            }
+            box.append(list);
+        }
+
+        function runLayout(fit) {
+            graph.layout({
+                name: 'cose',
+                animate: false,
+                randomize: false,
+                fit: fit,
+                padding: 30,
+                nodeRepulsion: function() { return 9000; },
+                idealEdgeLength: function() { return 90; }
+            }).run();
+        }
+
         function renderGraph(data) {
             if (data.error) {
-                $('#networkGraph').hide();
                 $('#graphMessage').text(data.error).show();
                 return;
             }
             $('#graphMessage').hide();
-            $('#networkGraph').attr('src', 'data:image/png;base64,' + data.graph).show();
+            if (!graph) {
+                createGraph();
+            }
+
+            const elements = data.graph.nodes.concat(data.graph.edges).map(decorate);
+            const signature = elements.map(e => e.data.id).sort().join('|');
+
+            if (graphSignature === null) {
+                // First drawing: lay everything out and fit it into view
+                graph.add(elements);
+                runLayout(true);
+            } else if (signature !== graphSignature) {
+                // Containers or connections changed: keep existing positions so nothing
+                // jumps, drop what's gone, and place new nodes beside their neighbours
+                const ids = new Set(elements.map(e => e.data.id));
+                graph.elements().filter(e => !ids.has(e.id())).remove();
+                const added = graph.add(elements.filter(e => graph.getElementById(e.data.id).empty()));
+                const center = { x: graph.width() / 2, y: graph.height() / 2 };
+                added.nodes().forEach(function(node) {
+                    const placed = node.neighborhood('node').filter(n => !added.contains(n));
+                    const anchor = placed.nonempty() ? placed.boundingBox() : null;
+                    // On a ring around the neighbours, clear of their labels
+                    const angle = Math.random() * 2 * Math.PI;
+                    node.position({
+                        x: (anchor ? (anchor.x1 + anchor.x2) / 2 : center.x) + Math.cos(angle) * 110,
+                        y: (anchor ? (anchor.y1 + anchor.y2) / 2 : center.y) + Math.sin(angle) * 110
+                    });
+                });
+            }
+            // Refresh details such as IPs and ports in place
+            elements.forEach(e => graph.getElementById(e.data.id).data(e.data));
+            graphSignature = signature;
         }
+
+        function resetGraph() {
+            if (graph) {
+                graph.elements().remove();
+            }
+            graphSignature = null;
+            $('#graphDetails').text('Click a container or network for details.');
+        }
+
+        $('#zoomIn, #zoomOut').on('click', function() {
+            if (!graph) return;
+            const factor = this.id === 'zoomIn' ? 1.25 : 0.8;
+            graph.zoom({
+                level: graph.zoom() * factor,
+                renderedPosition: { x: graph.width() / 2, y: graph.height() / 2 }
+            });
+        });
+        $('#zoomFit').on('click', function() {
+            if (graph) graph.fit(undefined, 30);
+        });
+        $('#tidyGraph').on('click', function() {
+            if (graph) runLayout(true);
+        });
 
         function selectEngine(name) {
             currentEngine = name;
@@ -498,7 +742,7 @@
                 startStats();
             }
             if (graphOn) {
-                $('#networkGraph').hide().attr('src', '');
+                resetGraph();
                 $('#graphMessage').hide();
                 startGraph();
             }
@@ -560,6 +804,10 @@
 
         function startGraph() {
             if (!graphStream && (!authEnabled || isAuthenticated)) {
+                if (graph) {
+                    // The canvas may have been hidden; re-measure it now it's visible
+                    setTimeout(function() { graph.resize(); }, 0);
+                }
                 graphStream = openStream('graph', renderGraph);
             }
         }
