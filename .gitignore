@@ -163,3 +163,5 @@ cython_debug/
 
 *.sqlite3
 *.lock
+# Pins the Rust dependencies; release builds use --locked
+!rust/Cargo.lock

@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools>=61.0", "wheel", "setuptools-rust>=1.9"]
+requires = ["setuptools>=84.1.0", "wheel", "setuptools-rust>=1.9"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -24,18 +24,26 @@ classifiers = [
     "Topic :: System :: Systems Administration",
 ]
 requires-python = ">=3.12.3"
+# Minimums are the first releases without known vulnerabilities (pip-audit)
 dependencies = [
-    "Django>=5.1.5",
-    "graphviz>=0.20.3",
-    "docker>=7.1.0",
-    "daphne>=4.1.2",
-    "requests>=2.32.3",
-    "black>=24.10.0",
-    "python-decouple>=3.6",
+    "Django>=6.1.2",
+    "graphviz>=0.21",
+    "docker>=7.2.0",
+    "daphne>=4.2.3",
+    "requests>=2.33.0",
+    "python-decouple>=3.8",
+    # Not used directly, but pulled in through daphne and Django: raise their
+    # minimums so upgrading dStats also replaces vulnerable installed copies
+    "Twisted>=26.10.0",
+    "sqlparse>=0.6.0",
+    "urllib3>=2.8.0",
+    "cryptography>=50.0.0",
+    "ujson>=5.13.0",
 ]
 
 [project.optional-dependencies]
 dev = [
+    "black>=26.10.1",
     "uv>=0.2",
     "twine>=4.0",
 ]

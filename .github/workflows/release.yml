@@ -62,9 +62,22 @@ jobs:
       - run: cargo audit
         working-directory: rust
 
+  python-audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install pip-audit
+      # Fails on known vulnerabilities (OSV, which includes GitHub advisories)
+      # in the pinned set and in what installing dStats resolves to today
+      - run: pip-audit -r requirements.txt -s osv
+      - run: pip-audit . -s osv
+
   publish:
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: [native-wheels, pure-wheel-and-sdist, audit]
+    needs: [native-wheels, pure-wheel-and-sdist, audit, python-audit]
     runs-on: ubuntu-latest
     environment: pypi
     permissions:
