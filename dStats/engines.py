@@ -65,7 +65,8 @@ def socket_url(name):
         candidates.append(f"{runtime_dir}/podman/podman.sock")  # rootless
     candidates.append("/run/podman/podman.sock")  # rootful, or mounted into a container
     for path in candidates:
-        if os.path.exists(path):
+        # Skip sockets this user can't open, e.g. root's when running rootless
+        if os.access(path, os.R_OK | os.W_OK):
             return f"unix://{path}"
     # Nothing running yet; report the most likely path in errors
     return f"unix://{candidates[0]}"
