@@ -33,6 +33,16 @@ docker run -d --name docker-stats-web \
 arifcse21/dstats:latest
 ```
 
+Or with Compose (Docker or Podman): copy `.env.example` to `.env`, adjust it, and pick a scenario:
+
+```bash
+docker compose --profile docker up -d          # monitor Docker
+podman compose --profile podman up -d          # monitor Podman
+docker compose --profile both up -d            # monitor both (toggle in the navbar)
+```
+
+All scenarios and settings are described in [docker-compose.yml](docker-compose.yml) and [.env.example](.env.example).
+
 ---
 
 ## Or You can run the Python pip package(requires Python 3.12+):

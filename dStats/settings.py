@@ -55,6 +55,9 @@ SECRET_KEY = config("SECRET_KEY", default="") or get_random_secret_key()
 DEBUG = config("DEBUG", default=False, cast=bool)
 
 ALLOWED_HOSTS = config("ALLOWED_HOSTS", default=default_allowed_hosts(), cast=Csv())
+# Always answer on localhost, e.g. the container healthcheck. DNS rebinding arrives with
+# the attacker's host name, so this doesn't weaken that protection.
+ALLOWED_HOSTS += [h for h in ("localhost", "127.0.0.1", "[::1]") if h not in ALLOWED_HOSTS]
 
 # Needed when dStats is served over HTTPS behind a reverse proxy, e.g. https://stats.example.com
 CSRF_TRUSTED_ORIGINS = config("CSRF_TRUSTED_ORIGINS", default="", cast=Csv())

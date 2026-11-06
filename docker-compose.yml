@@ -1,15 +1,106 @@
+# dStats with Docker Compose or Podman Compose.
+#
+# Pick ONE scenario with --profile (each one is a separate service; run one at a time):
+#
+#   Scenario                          Command
+#   --------------------------------  ----------------------------------------------------
+#   Monitor Docker                    docker compose --profile docker up -d
+#   Monitor Podman (rootless/rootful) podman compose --profile podman up -d
+#                                     (or: docker compose --profile podman up -d)
+#   Monitor both, run by Docker       docker compose --profile both up -d
+#   Monitor both, run by rootless     podman compose --profile both-rootless up -d
+#     Podman
+#
+# Settings come from a .env file next to this one: cp .env.example .env
+# Every variable is optional and documented in .env.example.
+#
+# Add --build to build the image from this checkout instead of pulling it from Docker Hub.
+# Stop with: docker compose --profile <name> down   (or podman compose ...)
+
+# Shared by every scenario
+x-dstats: &dstats
+  image: ${DSTATS_IMAGE:-arifcse21/dstats:latest}
+  build:
+    context: .
+    # Host networking for the build steps; works around hosts where container
+    # networking is unavailable during builds
+    network: host
+  container_name: dstats
+  restart: unless-stopped
+  ports:
+    # Published on 127.0.0.1 (this machine only) unless DSTATS_BIND says otherwise.
+    # Set AUTH_USERNAME / AUTH_PASSWORD before opening it to the network.
+    - "${DSTATS_BIND:-127.0.0.1}:${DSTATS_PUBLISHED_PORT:-2743}:2743"
+  healthcheck:
+    test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:2743/', timeout=5)"]
+    interval: 30s
+    timeout: 10s
+    start_period: 20s
+    retries: 3
+
+# Settings passed into the container (see .env.example for what each does)
+x-environment: &environment
+  USE_AUTH: ${USE_AUTH:-false}
+  AUTH_USERNAME: ${AUTH_USERNAME:-}
+  AUTH_PASSWORD: ${AUTH_PASSWORD:-}
+  ALLOWED_HOSTS: ${ALLOWED_HOSTS:-*}
+  CSRF_TRUSTED_ORIGINS: ${CSRF_TRUSTED_ORIGINS:-}
+  SECURE_COOKIES: ${SECURE_COOKIES:-false}
+  SECRET_KEY: ${SECRET_KEY:-}
+  DEBUG: ${DEBUG:-false}
+
 services:
-  dstats:
-    container_name: docker-stats-web-test
-    build: .
-    image: dstats:latest
-    restart: always
-    ports:
-      - "6743:2743"
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
+  # Monitor Docker. The Docker socket is mounted where dStats looks for it.
+  dstats-docker:
+    <<: *dstats
+    profiles: [docker]
     environment:
-      - DJANGO_SETTINGS_MODULE=dStats.settings
-      - USE_AUTH=true
-      - AUTH_USERNAME=<your_username>
-      - AUTH_PASSWORD=<your_password>
+      <<: *environment
+      DSTATS_ENGINE: docker
+    volumes:
+      - ${DOCKER_SOCKET:-/var/run/docker.sock}:/var/run/docker.sock
+
+  # Monitor Podman. Mount the host's Podman socket (enable it first:
+  # systemctl --user enable --now podman.socket) where dStats looks for it.
+  # label=disable lets the container use the socket on SELinux hosts (Fedora, RHEL).
+  dstats-podman:
+    <<: *dstats
+    profiles: [podman]
+    environment:
+      <<: *environment
+      DSTATS_ENGINE: podman
+    volumes:
+      - ${PODMAN_SOCKET:-/run/user/1000/podman/podman.sock}:/run/podman/podman.sock
+    security_opt:
+      - label=disable
+
+  # Monitor both engines, with dStats itself run by Docker. Container root can open
+  # both sockets, so no extra permissions are needed. Toggle engines in the navbar.
+  dstats-both:
+    <<: *dstats
+    profiles: [both]
+    environment:
+      <<: *environment
+      DSTATS_ENGINE: docker,podman
+    volumes:
+      - ${DOCKER_SOCKET:-/var/run/docker.sock}:/var/run/docker.sock
+      - ${PODMAN_SOCKET:-/run/user/1000/podman/podman.sock}:/run/podman/podman.sock
+    security_opt:
+      - label=disable
+
+  # Monitor both engines, with dStats itself run by rootless Podman. The Docker
+  # socket belongs to the host's "docker" group; keep-groups passes your user's groups
+  # into the container so it can open it (your user must be in that group).
+  dstats-both-rootless:
+    <<: *dstats
+    profiles: [both-rootless]
+    environment:
+      <<: *environment
+      DSTATS_ENGINE: docker,podman
+    volumes:
+      - ${DOCKER_SOCKET:-/var/run/docker.sock}:/var/run/docker.sock
+      - ${PODMAN_SOCKET:-/run/user/1000/podman/podman.sock}:/run/podman/podman.sock
+    security_opt:
+      - label=disable
+    group_add:
+      - keep-groups

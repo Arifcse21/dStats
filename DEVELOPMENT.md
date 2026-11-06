@@ -12,7 +12,7 @@ For using dStats (not developing it), see [README.md](README.md).
 | Tool | Needed for | Install |
 |---|---|---|
 | Python 3.12+ | everything | your OS package manager |
-| Graphviz (`dot`) | only the PNG graph from the JSON API (`GET /?type=graph`); the dashboard draws its graph in the browser | `apt install graphviz` · `dnf install graphviz` · `pacman -S graphviz` · `brew install graphviz` |
+| Graphviz (`dot`) | only the PNG graph from the JSON API (`GET /?type=graph`); the dashboard draws its graph in the browser, so the container image leaves it out | `apt install graphviz` · `dnf install graphviz` · `pacman -S graphviz` · `brew install graphviz` |
 | Docker and/or Podman | something to monitor | [Docker](https://docs.docker.com/engine/install/) · [Podman](https://podman.io/docs/installation) |
 | Rust (optional) | the native accelerator | `curl -sSf https://sh.rustup.rs \| sh` |
 
@@ -239,7 +239,7 @@ dependency versions from `requirements.txt`. Podman reads the same `Dockerfile`.
 
 ```bash
 docker build -t dstats:local .
-podman build -t dstats:local .
+podman build --format docker -t dstats:local .    # --format docker keeps the HEALTHCHECK
 ```
 
 ### Run, monitoring Docker
@@ -277,17 +277,28 @@ podman run -d --name dstats --security-opt label=disable \
 (`docker run` works the same, without `--security-opt`.) Under rootless Podman, the
 container can only open `/var/run/docker.sock` if your user is in the `docker` group and
 those groups are passed through: add `--group-add keep-groups` to the command above.
+That needs Podman's `crun` runtime (`podman info --format '{{.Host.OCIRuntime.Name}}'`);
+with `runc` the groups are silently dropped.
 
 To reach dStats from other machines, set `USE_AUTH=true`, `AUTH_USERNAME` and
 `AUTH_PASSWORD`, and publish the port without `127.0.0.1:`.
 
 ### Compose
 
-```bash
-docker compose up -d --build     # or: podman compose up -d --build
-```
+`docker-compose.yml` has one profile per scenario, and its settings come from `.env`
+(`cp .env.example .env`; every setting is documented there):
 
-Replace the credential placeholders in `docker-compose.yml` first. The UI is on port 6743.
+| Profile | Monitors | Run with |
+|---|---|---|
+| `docker` | Docker | `docker compose --profile docker up -d` |
+| `podman` | Podman | `podman compose --profile podman up -d` |
+| `both` | Docker and Podman | `docker compose --profile both up -d` |
+| `both-rootless` | Docker and Podman | `podman compose --profile both-rootless up -d` (rootless Podman) |
+
+Add `--build` to build from this checkout instead of pulling from Docker Hub. The UI is on
+http://localhost:2743. It's published on `127.0.0.1` only, until you set `DSTATS_BIND`
+and the login in `.env`. Stop with `docker compose --profile <name> down` (or
+`podman compose`).
 
 ### Publish to Docker Hub (amd64 + arm64)
 
@@ -297,7 +308,7 @@ docker buildx build --platform linux/amd64,linux/arm64 \
   -t arifcse21/dstats:1.0.8 -t arifcse21/dstats:latest --push .
 
 # Podman
-podman build --platform linux/amd64,linux/arm64 --manifest dstats-release .
+podman build --format docker --platform linux/amd64,linux/arm64 --manifest dstats-release .
 podman manifest push --all dstats-release docker://docker.io/arifcse21/dstats:1.0.8
 podman manifest push --all dstats-release docker://docker.io/arifcse21/dstats:latest
 ```

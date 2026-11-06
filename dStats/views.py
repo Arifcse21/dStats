@@ -9,7 +9,7 @@ from decouple import config
 from dataclasses import asdict, dataclass
 from typing import List, Dict
 import random
-from graphviz import Graph
+from graphviz import ExecutableNotFound, Graph
 import base64
 from io import BytesIO
 from django.views.generic import TemplateView
@@ -621,9 +621,20 @@ class DockerStatsView(TemplateView):
                     {"stats": STATS_RESULT.get(self.get_container_stats)}
                 )
             elif request.GET.get("type") == "graph":
-                return JsonResponse(
-                    {"graph": GRAPH_RESULT.get(self.generate_network_graph)}
-                )
+                try:
+                    return JsonResponse(
+                        {"graph": GRAPH_RESULT.get(self.generate_network_graph)}
+                    )
+                except ExecutableNotFound:
+                    # Graphviz is optional (the container image leaves it out); the
+                    # dashboard draws its graph in the browser and doesn't need it
+                    return JsonResponse(
+                        {
+                            "error": "The PNG graph needs Graphviz (the dot command), "
+                            "which isn't installed on this server."
+                        },
+                        status=501,
+                    )
 
         # For normal page loads, render the template
         context = self.get_context_data(**kwargs)
