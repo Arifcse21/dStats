@@ -21,28 +21,49 @@
             margin-bottom: 20px;
         }
 
-        .coffee-button {
+        .donate {
             display: inline-flex;
-            align-items: center;
-            padding: 10px 20px;
-            background-color: #FFDD00;
-            color: #000000;
-            text-decoration: none;
-            border-radius: 8px;
+            gap: 8px;
+            max-width: 100%;
+            margin-top: 10px;
+        }
+
+        /* Read-only, so the address can be selected but not edited */
+        #solanaAddress {
+            width: 30em;
+            max-width: 100%;
+            padding: 8px 10px;
+            font-family: monospace;
+            font-size: 14px;
+            border: 1px solid #ccc;
+            border-radius: 6px;
+            background: #f8f9fa;
+            color: #333;
+            text-align: center;
+        }
+
+        .copy-button {
+            padding: 8px 16px;
+            background-color: #9945FF;
+            color: #ffffff;
+            border: none;
+            border-radius: 6px;
             font-weight: bold;
+            cursor: pointer;
+            white-space: nowrap;
             transition: transform 0.2s, box-shadow 0.2s;
             box-shadow: 0 2px 8px rgba(0,0,0,0.15);
         }
 
-        .coffee-button:hover {
+        .copy-button:hover {
             transform: translateY(-2px);
             box-shadow: 0 4px 12px rgba(0,0,0,0.2);
         }
 
-        .coffee-icon {
-            width: 24px;
-            height: 24px;
-            margin-right: 8px;
+        .donate-note {
+            margin: 8px 0 0;
+            font-size: 12px;
+            color: #777;
         }
 
         .container {
@@ -157,9 +178,6 @@
             box-shadow: 0 2px 4px rgba(0,0,0,0.1);
         }
 
-        footer .coffee-button {
-            margin-top: 10px;
-        }
 
         /* Login Modal Styles */
         .modal {
@@ -413,10 +431,13 @@
     </div>
 
     <footer>
-        <p>Enjoying this Docker Stats and Network Visualizer? Support the project!</p>
-        <a href="https://ko-fi.com/arifcse21" target="_blank" class="coffee-button">
-            Buy me a coffee
-        </a>
+        <p>Enjoying dStats? Support the project with a SOL donation.</p>
+        <div class="donate">
+            <input id="solanaAddress" type="text" readonly aria-label="Solana wallet address"
+                   value="A8qJWveDexeEtEzp8iXs7bG4451Dfqzpijg8GRqjhAvW">
+            <button type="button" id="copySolana" class="copy-button">Copy</button>
+        </div>
+        <p class="donate-note">Solana network only (SOL or SPL tokens).</p>
     </footer>
 
     {{ engines|json_script:"engines-data" }}
@@ -440,6 +461,29 @@
 
         let statsStream = null;
         let graphStream = null;
+
+        // Copy the donation address. The Clipboard API only exists on HTTPS and localhost,
+        // and dStats is often opened over plain HTTP on a LAN address, so fall back to the
+        // older copy command, and finally just select it for Ctrl+C.
+        $('#copySolana').on('click', function() {
+            const field = document.getElementById('solanaAddress');
+            const button = $(this);
+            const done = function(label) {
+                button.text(label);
+                setTimeout(function() { button.text('Copy'); }, 2000);
+            };
+            const fallback = function() {
+                field.select();
+                let copied = false;
+                try { copied = document.execCommand('copy'); } catch (e) {}
+                done(copied ? 'Copied!' : 'Press Ctrl+C');
+            };
+            if (navigator.clipboard && window.isSecureContext) {
+                navigator.clipboard.writeText(field.value).then(function() { done('Copied!'); }, fallback);
+            } else {
+                fallback();
+            }
+        });
 
         $(document).ready(function() {
             // No streams are open yet, so this only marks the engine in the navbar
